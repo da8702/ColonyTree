@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1 class="mb-4">Welcome to Animal Colony Manager</h1>
+        <p class="lead">Manage your animal colonies with ease.</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Manage Colonies</h5>
+                <p class="card-text">Create, load, and save animal colonies.</p>
+                <a href="{{ url_for('list_colonies') }}" class="btn btn-primary">View Colonies</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Add Animals</h5>
+                <p class="card-text">Add new animals to your colony.</p>
+                <a href="{{ url_for('new_colony') }}" class="btn btn-primary">Create New Colony</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Visualize</h5>
+                <p class="card-text">View your colony's family tree.</p>
+                <a href="{{ url_for('list_colonies') }}" class="btn btn-primary">View Visualization</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

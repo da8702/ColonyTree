@@ -1,0 +1,7 @@
+PyQt5>=5.15.0
+networkx>=2.6.0
+matplotlib>=3.4.0
+dash>=2.9.0
+dash-cytoscape>=0.3.0
+flask>=2.0.0
+requests>=2.31.0

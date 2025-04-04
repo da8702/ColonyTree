@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1 class="mb-4">Family Tree Visualization</h1>
+        <div class="card">
+            <div class="card-body">
+                <div id="cytoscape" style="width: 100%; height: 80vh;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Cytoscape
+    var cy = cytoscape({
+        container: document.getElementById('cytoscape'),
+        elements: [],
+        style: [
+            {
+                selector: 'node',
+                style: {
+                    'content': 'data(label)',
+                    'text-wrap': 'wrap',
+                    'text-max-width': '100px',
+                    'font-size': '12px',
+                    'text-valign': 'center',
+                    'text-halign': 'center',
+                    'background-color': '#ffffff',
+                    'border-width': 1,
+                    'border-color': '#000000',
+                    'shape': 'ellipse',
+                    'width': '100px',
+                    'height': '40px',
+                    'padding': '5px'
+                }
+            },
+            {
+                selector: 'node[sex="M"]',
+                style: {
+                    'shape': 'rectangle',
+                    'background-color': '#e6f3ff'
+                }
+            },
+            {
+                selector: 'node[sex="F"]',
+                style: {
+                    'background-color': '#ffe6e6'
+                }
+            },
+            {
+                selector: 'edge',
+                style: {
+                    'width': 1,
+                    'line-color': '#666666',
+                    'target-arrow-color': '#666666',
+                    'target-arrow-shape': 'triangle',
+                    'curve-style': 'bezier',
+                    'target-distance-from-node': 5
+                }
+            }
+        ]
+    });
+
+    // Custom layout function
+    function customLayout() {
+        const VERTICAL_SPACING = 200;
+        const HORIZONTAL_SPACING = 200;
+        const NODE_WIDTH = 100;
+        const NODE_HEIGHT = 40;
+
+        // Get all nodes and edges
+        const nodes = cy.nodes();
+        const edges = cy.edges();
+
+        // Find root nodes (nodes with no parents)
+        const rootNodes = nodes.filter(node => {
+            return !edges.some(edge => edge.target().id() === node.id());
+        });
+
+        // Group nodes by generation
+        const generations = new Map();
+        const processedNodes = new Set();
+
+        // Helper function to get generation of a node
+        function getGeneration(node) {
+            if (processedNodes.has(node.id())) {
+                return generations.get(node.id());
+            }
+
+            const parentEdges = edges.filter(edge => edge.target().id() === node.id());
+            if (parentEdges.length === 0) {
+                generations.set(node.id(), 0);
+                processedNodes.add(node.id());
+                return 0;
+            }
+
+            const parentGenerations = parentEdges.map(edge => 
+                getGeneration(edge.source())
+            );
+            const generation = Math.max(...parentGenerations) + 1;
+            generations.set(node.id(), generation);
+            processedNodes.add(node.id());
+            return generation;
+        }
+
+        // Calculate generations for all nodes
+        nodes.forEach(node => getGeneration(node));
+
+        // Group nodes by generation
+        const nodesByGeneration = new Map();
+        nodes.forEach(node => {
+            const gen = generations.get(node.id());
+            if (!nodesByGeneration.has(gen)) {
+                nodesByGeneration.set(gen, []);
+            }
+            nodesByGeneration.get(gen).push(node);
+        });
+
+        // Position nodes by generation
+        let currentY = 0;
+        nodesByGeneration.forEach((genNodes, gen) => {
+            // Sort nodes in this generation by their parents' positions
+            genNodes.sort((a, b) => {
+                const aParents = edges.filter(edge => edge.target().id() === a.id())
+                    .map(edge => edge.source().position('x'));
+                const bParents = edges.filter(edge => edge.target().id() === b.id())
+                    .map(edge => edge.source().position('x'));
+                
+                if (aParents.length === 0 && bParents.length === 0) return 0;
+                if (aParents.length === 0) return -1;
+                if (bParents.length === 0) return 1;
+                
+                return Math.min(...aParents) - Math.min(...bParents);
+            });
+
+            // Position nodes in this generation
+            const totalWidth = (genNodes.length - 1) * HORIZONTAL_SPACING;
+            let currentX = -totalWidth / 2;
+
+            genNodes.forEach(node => {
+                node.position({
+                    x: currentX,
+                    y: currentY
+                });
+                currentX += HORIZONTAL_SPACING;
+            });
+
+            currentY += VERTICAL_SPACING;
+        });
+
+        // Center the graph
+        cy.center();
+    }
+
+    // Load colony data
+    fetch('/api/colony')
+        .then(response => response.json())
+        .then(data => {
+            // Create nodes
+            data.animals.forEach(animal => {
+                cy.add({
+                    data: {
+                        id: animal.animal_id,
+                        label: `${animal.animal_id}\n${animal.genotype}`,
+                        sex: animal.sex
+                    }
+                });
+            });
+
+            // Create edges
+            data.animals.forEach(animal => {
+                if (animal.mother_id) {
+                    cy.add({
+                        data: {
+                            source: animal.mother_id,
+                            target: animal.animal_id,
+                            type: 'mother'
+                        }
+                    });
+                }
+                if (animal.father_id) {
+                    cy.add({
+                        data: {
+                            source: animal.father_id,
+                            target: animal.animal_id,
+                            type: 'father'
+                        }
+                    });
+                }
+            });
+
+            // Run custom layout
+            customLayout();
+
+            // Fit the graph to the viewport with padding
+            cy.fit(100);
+
+            // Add zoom controls
+            cy.on('mouseover', 'node', function(e) {
+                e.target.style('border-width', '2px');
+            });
+            cy.on('mouseout', 'node', function(e) {
+                e.target.style('border-width', '1px');
+            });
+
+            // Add zoom buttons
+            const zoomIn = document.createElement('button');
+            zoomIn.className = 'btn btn-sm btn-primary position-fixed bottom-0 end-0 m-3';
+            zoomIn.innerHTML = 'Zoom In';
+            zoomIn.onclick = () => cy.zoom(cy.zoom() * 1.2);
+            document.body.appendChild(zoomIn);
+
+            const zoomOut = document.createElement('button');
+            zoomOut.className = 'btn btn-sm btn-primary position-fixed bottom-0 end-0 m-3 me-5';
+            zoomOut.innerHTML = 'Zoom Out';
+            zoomOut.onclick = () => cy.zoom(cy.zoom() * 0.8);
+            document.body.appendChild(zoomOut);
+        })
+        .catch(error => console.error('Error loading colony data:', error));
+});
+</script>
+{% endblock %} 

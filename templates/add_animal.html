@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6 offset-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title mb-4">Add New Animal</h2>
+                <form method="post">
+                    <div class="mb-3">
+                        <label for="animal_id" class="form-label">Animal ID</label>
+                        <input type="text" class="form-control" id="animal_id" name="animal_id" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="sex" class="form-label">Sex</label>
+                        <select class="form-select" id="sex" name="sex" required>
+                            <option value="M">Male</option>
+                            <option value="F">Female</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="genotype" class="form-label">Genotype</label>
+                        <input type="text" class="form-control" id="genotype" name="genotype" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="dob" class="form-label">Date of Birth</label>
+                        <input type="date" class="form-control" id="dob" name="dob" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="mother_id" class="form-label">Mother ID (Optional)</label>
+                        <select class="form-select" id="mother_id" name="mother_id">
+                            <option value="">None</option>
+                            {% for animal in colony.animals %}
+                            {% if animal.sex == 'F' %}
+                            <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="father_id" class="form-label">Father ID (Optional)</label>
+                        <select class="form-select" id="father_id" name="father_id">
+                            <option value="">None</option>
+                            {% for animal in colony.animals %}
+                            {% if animal.sex == 'M' %}
+                            <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Add Animal</button>
+                        <a href="{{ url_for('view_colony') }}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

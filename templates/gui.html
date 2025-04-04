@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Animal Colony Manager - GUI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .nav-buttons {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 10px;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .submit-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .submit-button:hover {
+            background-color: #45a049;
+        }
+        .info {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Animal Colony Manager</h1>
+        <div class="nav-buttons">
+            <a href="/" class="button">Home</a>
+            <a href="/visualization" class="button">Tree Visualization</a>
+            <a href="/gui" class="button">GUI</a>
+        </div>
+        
+        <h2>Add New Animal</h2>
+        <form id="animalForm" onsubmit="return submitForm(event)">
+            <div class="form-group">
+                <label for="animalId">Animal ID:</label>
+                <input type="text" id="animalId" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="sex">Sex:</label>
+                <select id="sex" required>
+                    <option value="M">Male</option>
+                    <option value="F">Female</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="genotype">Genotype:</label>
+                <select id="genotype" required>
+                    <option value="Homo (+/+)">Homo (+/+)</option>
+                    <option value="Het (+/-)">Het (+/-)</option>
+                    <option value="WT (-/-)">WT (-/-)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="dob">Date of Birth:</label>
+                <input type="date" id="dob" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="motherId">Mother ID (optional):</label>
+                <input type="text" id="motherId">
+            </div>
+            
+            <div class="form-group">
+                <label for="fatherId">Father ID (optional):</label>
+                <input type="text" id="fatherId">
+            </div>
+            
+            <button type="submit" class="submit-button">Add Animal</button>
+        </form>
+        
+        <div class="info">
+            <p>Fill out the form above to add a new animal to your colony.</p>
+            <p>All fields except Mother ID and Father ID are required.</p>
+        </div>
+    </div>
+
+    <script>
+        function submitForm(event) {
+            event.preventDefault();
+            
+            const formData = {
+                animal_id: document.getElementById('animalId').value,
+                sex: document.getElementById('sex').value,
+                genotype: document.getElementById('genotype').value,
+                dob: document.getElementById('dob').value,
+                mother_id: document.getElementById('motherId').value,
+                father_id: document.getElementById('fatherId').value
+            };
+            
+            // Send data to server
+            fetch('/add_animal', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Animal added successfully!');
+                    document.getElementById('animalForm').reset();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+            });
+            
+            return false;
+        }
+    </script>
+</body>
+</html> 
