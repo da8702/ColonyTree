@@ -178,4 +178,4 @@ def update_graph(n):
     return create_family_tree()
 
 if __name__ == '__main__':
-    app.run_server(debug=True) 
+    app.run(debug=False, port=8050) 

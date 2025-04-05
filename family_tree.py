@@ -304,7 +304,7 @@ class MainWindow(QMainWindow):
     def run_dash_server(self):
         """Run the Dash server"""
         try:
-            dash_app.run_server(debug=False, port=8050, use_reloader=False)
+            dash_app.run(debug=False, port=8050, use_reloader=False)
         except Exception as e:
             print(f"Dash server error: {str(e)}")
 
