@@ -126,6 +126,14 @@ def new_colony():
         name = request.form['name']
         global current_colony
         current_colony = Colony(name)
+        
+        # Save the empty colony immediately
+        try:
+            save_colony(current_colony, name)
+            print(f"Created and saved new empty colony: {name}")
+        except Exception as e:
+            print(f"Error saving new colony: {str(e)}")
+        
         return redirect(url_for('view_colony'))
     return render_template('new_colony.html')
 
@@ -261,9 +269,9 @@ def delete_animal(animal_id):
         if animal:
             # Remove parent-child relationships
             if animal.mother:
-                animal.mother.children.remove(animal)
+                animal.mother.children = [child for child in animal.mother.children if child != animal_id]
             if animal.father:
-                animal.father.children.remove(animal)
+                animal.father.children = [child for child in animal.father.children if child != animal_id]
             
             # Remove the animal from the colony
             current_colony.animals.remove(animal)
@@ -361,6 +369,34 @@ def rename_colony_file(old_name):
         return redirect(url_for('list_colonies'))
     except Exception as e:
         return f"Error renaming colony: {str(e)}", 500
+
+@app.route('/delete_colony/<name>', methods=['POST'])
+def delete_colony(name):
+    """Delete a colony file"""
+    # Ensure the colonies directory exists
+    if not os.path.exists('colonies'):
+        return "Error: Colonies directory not found", 404
+    
+    colony_path = os.path.join('colonies', f'{name}.json')
+    
+    # Check if the file exists
+    if not os.path.exists(colony_path):
+        return "Error: Colony file not found", 404
+    
+    try:
+        # If this is the currently loaded colony, clear it
+        global current_colony
+        if current_colony and current_colony.name == name:
+            current_colony = None
+        
+        # Delete the file
+        os.remove(colony_path)
+        print(f"Deleted colony: {name}")
+        
+        return redirect(url_for('list_colonies'))
+    except Exception as e:
+        print(f"Error deleting colony: {str(e)}")
+        return f"Error deleting colony: {str(e)}", 500
 
 @app.route('/edit_animal_id', methods=['POST'])
 def edit_animal_id():
