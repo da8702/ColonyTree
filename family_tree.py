@@ -13,88 +13,7 @@ import sys
 import webbrowser
 from threading import Thread
 from tree_visualization import app as dash_app
-
-class Animal:
-    def __init__(self, animal_id: str, sex: str, genotype: str, dob: date,
-                 mother: Optional["Animal"] = None, father: Optional["Animal"] = None,
-                 notes: Optional[str] = None):
-        self.animal_id = animal_id
-        self.sex = sex
-        self.genotype = genotype
-        self.dob = dob
-        self.mother = mother
-        self.father = father
-        self.offspring: List["Animal"] = []
-        self.notes = notes
-
-        # Automatically link to parents' offspring lists
-        if mother:
-            mother.offspring.append(self)
-        if father:
-            father.offspring.append(self)
-
-    def __str__(self):
-        return f"{self.animal_id} ({self.sex}) - {self.genotype}"
-    
-    def to_dict(self):
-        """Convert animal to dictionary for JSON serialization"""
-        return {
-            'animal_id': self.animal_id,
-            'sex': self.sex,
-            'genotype': self.genotype,
-            'dob': self.dob.isoformat(),
-            'mother_id': self.mother.animal_id if self.mother else None,
-            'father_id': self.father.animal_id if self.father else None,
-            'notes': self.notes
-        }
-    
-    @classmethod
-    def from_dict(cls, data: dict, colony: "Colony"):
-        """Create animal from dictionary"""
-        return cls(
-            animal_id=data['animal_id'],
-            sex=data['sex'],
-            genotype=data['genotype'],
-            dob=date.fromisoformat(data['dob']),
-            notes=data['notes']
-        )
-
-class Colony:
-    def __init__(self, name: str):
-        self.name = name
-        self.animals: List[Animal] = []
-
-    def add_animal(self, animal: Animal):
-        self.animals.append(animal)
-    
-    def to_dict(self):
-        """Convert colony to dictionary for JSON serialization"""
-        return {
-            'name': self.name,
-            'animals': [animal.to_dict() for animal in self.animals]
-        }
-    
-    @classmethod
-    def from_dict(cls, data: dict):
-        """Create colony from dictionary"""
-        colony = cls(data['name'])
-        
-        # First pass: create all animals without relationships
-        animal_dict = {}
-        for animal_data in data['animals']:
-            animal = Animal.from_dict(animal_data, colony)
-            colony.add_animal(animal)
-            animal_dict[animal.animal_id] = animal
-        
-        # Second pass: establish relationships
-        for animal_data in data['animals']:
-            animal = animal_dict[animal_data['animal_id']]
-            if animal_data['mother_id']:
-                animal.mother = animal_dict[animal_data['mother_id']]
-            if animal_data['father_id']:
-                animal.father = animal_dict[animal_data['father_id']]
-        
-        return colony
+from models import Animal, Colony
 
 class FamilyTreeView(QFrame):
     def __init__(self, colony: Colony):
@@ -228,6 +147,10 @@ class AnimalTreeTab(QWidget):
 
     def add_animal(self):
         try:
+            print("\n=== Adding New Animal ===")
+            print(f"Current colony: {self.colony.name}")
+            print(f"Current number of animals: {len(self.colony.animals)}")
+            
             animal_id = self.id_input.text()
             if not animal_id:
                 QMessageBox.warning(self, "Error", "Please enter an Animal ID")
@@ -248,8 +171,30 @@ class AnimalTreeTab(QWidget):
             animal = Animal(animal_id, sex, genotype, dob, mother, father)
             self.colony.add_animal(animal)
             
+            print(f"Added animal: {animal_id}")
+            print(f"New number of animals: {len(self.colony.animals)}")
+            
             # Update tree view
             self.tree_view.update_tree()
+            
+            # Auto-save the colony
+            try:
+                # Ensure the colonies directory exists
+                os.makedirs('colonies', exist_ok=True)
+                filename = os.path.join(os.getcwd(), 'colonies', f"{self.colony.name.lower().replace(' ', '_')}.json")
+                save_colony(self.colony, filename)
+                print(f"Saved colony to: {filename}")
+                
+                # Update the Dash visualization if it's running
+                if hasattr(self.parent(), 'dash_thread') and self.parent().dash_thread and self.parent().dash_thread.is_alive():
+                    print("Updating Dash visualization...")
+                    dash_app.update_colony(self.colony)
+                    print("Dash visualization updated")
+                else:
+                    print("Dash visualization not running")
+            except Exception as save_error:
+                print(f"Error saving/updating: {str(save_error)}")
+                QMessageBox.warning(self, "Warning", f"Animal added but failed to auto-save: {str(save_error)}")
             
             # Clear inputs
             self.id_input.clear()
@@ -259,6 +204,7 @@ class AnimalTreeTab(QWidget):
             QMessageBox.information(self, "Success", f"Added animal {animal_id}")
             
         except Exception as e:
+            print(f"Error adding animal: {str(e)}")
             QMessageBox.critical(self, "Error", f"Failed to add animal: {str(e)}")
 
 class MainWindow(QMainWindow):
@@ -355,35 +301,72 @@ class MainWindow(QMainWindow):
     def close_colony(self, index):
         self.tab_widget.removeTab(index)
 
+    def run_dash_server(self):
+        """Run the Dash server"""
+        try:
+            dash_app.run_server(debug=False, port=8050, use_reloader=False)
+        except Exception as e:
+            print(f"Dash server error: {str(e)}")
+
     def open_visualization(self):
         """Open the Dash visualization in the default web browser"""
+        print("\n=== Opening Visualization ===")
+        current_tab = self.tab_widget.currentWidget()
+        if not current_tab:
+            QMessageBox.warning(self, "Error", "No colony selected")
+            return
+            
+        # Get the current colony
+        current_colony = current_tab.colony
+        print(f"Current colony: {current_colony.name}")
+        print(f"Number of animals: {len(current_colony.animals)}")
+        
         if self.dash_thread is None or not self.dash_thread.is_alive():
+            print("Starting new Dash server...")
+            # Update the Dash app with the current colony
+            dash_app.update_colony(current_colony)
+            print("Updated Dash app with current colony")
+            
             # Start Dash server in a separate thread
             self.dash_thread = Thread(target=self.run_dash_server)
             self.dash_thread.daemon = True
             self.dash_thread.start()
+            print("Started Dash server thread")
             
             # Wait a moment for the server to start
             import time
-            time.sleep(1)
+            time.sleep(2)  # Increased wait time to ensure server starts
+            print("Server startup wait complete")
             
             # Open the visualization in the default web browser
             webbrowser.open('http://127.0.0.1:8050')
+            print("Opened browser")
         else:
-            # If the server is already running, just open the browser
+            print("Dash server already running, updating colony...")
+            # If the server is already running, update the colony and refresh
+            dash_app.update_colony(current_colony)
+            print("Updated Dash app with current colony")
             webbrowser.open('http://127.0.0.1:8050')
-
-    def run_dash_server(self):
-        """Run the Dash server"""
-        dash_app.run_server(debug=False, port=8050)
+            print("Opened browser")
 
 def save_colony(colony: Colony, filename: str):
     """Save colony to JSON file"""
+    # Ensure the colonies directory exists
+    os.makedirs('colonies', exist_ok=True)
+    
+    # Convert to absolute path if it's a relative path
+    if not os.path.isabs(filename):
+        filename = os.path.join(os.getcwd(), filename)
+    
     with open(filename, 'w') as f:
         json.dump(colony.to_dict(), f, indent=2)
 
 def load_colony(filename: str) -> Colony:
     """Load colony from JSON file"""
+    # Convert to absolute path if it's a relative path
+    if not os.path.isabs(filename):
+        filename = os.path.join(os.getcwd(), filename)
+        
     with open(filename, 'r') as f:
         data = json.load(f)
     return Colony.from_dict(data)

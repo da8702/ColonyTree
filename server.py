@@ -8,35 +8,13 @@ import time
 from datetime import datetime
 import requests
 import subprocess
-from family_tree import Animal, Colony
+from models import Animal, Colony
 
 # Create Flask app
 app = Flask(__name__)
 
-# Global variables for Qt application
-qt_app = None
-main_window = None
-dash_process = None
-
 # Global variable to store current colony
 current_colony = None
-
-def run_qt():
-    """Run the PyQt5 application"""
-    try:
-        print("Starting PyQt5 application...")
-        from PyQt5.QtWidgets import QApplication
-        from family_tree import MainWindow as QtMainWindow
-        
-        global qt_app, main_window
-        qt_app = QApplication(sys.argv)
-        main_window = QtMainWindow()
-        main_window.show()
-        print("PyQt5 window should be visible now")
-        qt_app.exec_()
-    except Exception as e:
-        print(f"Error starting PyQt5 application: {e}")
-        print("Full error details:", sys.exc_info())
 
 def run_dash():
     """Run the Dash application"""
@@ -93,11 +71,17 @@ def load_colony(filename):
     
     # First pass: create all animals
     for animal_data in data['animals']:
+        # Parse the date string, handling both date-only and datetime formats
+        dob_str = animal_data['dob']
+        if 'T' in dob_str:  # If it's a datetime string
+            dob_str = dob_str.split('T')[0]  # Take just the date part
+        dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
+        
         animal = Animal(
             animal_data['animal_id'],
             animal_data['sex'],
             animal_data['genotype'],
-            datetime.strptime(animal_data['dob'], '%Y-%m-%d').date(),
+            dob,
             None,  # mother will be set in second pass
             None   # father will be set in second pass
         )
@@ -117,15 +101,22 @@ def load_colony(filename):
 
 @app.route('/')
 def index():
-    """Serve the main page"""
-    return render_template('index.html')
+    """Redirect to colonies page"""
+    return redirect(url_for('list_colonies'))
 
 @app.route('/colonies')
 def list_colonies():
     """List all available colonies"""
+    # Ensure the colonies directory exists
     if not os.path.exists('colonies'):
         os.makedirs('colonies')
-    colonies = [f[:-5] for f in os.listdir('colonies') if f.endswith('.json')]
+    
+    # Get list of colony files
+    colonies = []
+    for file in os.listdir('colonies'):
+        if file.endswith('.json'):
+            colonies.append(file[:-5])  # Remove .json extension
+    
     return render_template('colonies.html', colonies=colonies)
 
 @app.route('/colony/new', methods=['GET', 'POST'])
@@ -166,7 +157,7 @@ def view_colony():
         return redirect(url_for('list_colonies'))
     return render_template('view_colony.html', colony=current_colony)
 
-@app.route('/animal/add', methods=['GET', 'POST'])
+@app.route('/add_animal', methods=['GET', 'POST'])
 def add_animal():
     """Add a new animal to the current colony"""
     if not current_colony:
@@ -174,30 +165,43 @@ def add_animal():
     
     if request.method == 'POST':
         try:
-            animal = Animal(
-                request.form['animal_id'],
-                request.form['sex'],
-                request.form['genotype'],
-                datetime.strptime(request.form['dob'], '%Y-%m-%d').date(),
-                None,  # mother will be set later
-                None   # father will be set later
-            )
+            data = request.get_json()
+            animal_id = data.get('animal_id')
+            sex = data.get('sex')
+            genotype = data.get('genotype')
+            dob = datetime.strptime(data.get('dob'), '%Y-%m-%d')
+            mother_id = data.get('mother_id')
+            father_id = data.get('father_id')
             
-            # Set parents if IDs are provided
-            if request.form['mother_id']:
-                mother = next((a for a in current_colony.animals if a.animal_id == request.form['mother_id']), None)
+            # Create the animal
+            animal = Animal(animal_id, sex, genotype, dob)
+            
+            # Set parent relationships if provided
+            if mother_id:
+                mother = current_colony.get_animal(mother_id)
                 if mother:
                     animal.mother = mother
+                    mother.children.append(animal)
             
-            if request.form['father_id']:
-                father = next((a for a in current_colony.animals if a.animal_id == request.form['father_id']), None)
+            if father_id:
+                father = current_colony.get_animal(father_id)
                 if father:
                     animal.father = father
+                    father.children.append(animal)
             
             current_colony.add_animal(animal)
-            return redirect(url_for('view_colony'))
+            
+            # Save the colony after adding the animal
+            try:
+                save_colony(current_colony, current_colony.name)
+                print(f"Saved colony after adding animal {animal_id}")
+            except Exception as save_error:
+                print(f"Error saving colony: {str(save_error)}")
+            
+            return jsonify({'success': True})
         except Exception as e:
-            return f"Error adding animal: {str(e)}", 400
+            print(f"Error adding animal: {str(e)}")
+            return jsonify({'success': False, 'error': str(e)})
     
     return render_template('add_animal.html', colony=current_colony)
 
@@ -245,6 +249,84 @@ def rename_colony():
     current_colony.name = new_name
     return redirect(url_for('view_colony'))
 
+@app.route('/delete_animal/<animal_id>', methods=['POST'])
+def delete_animal(animal_id):
+    """Delete an animal from the current colony"""
+    if not current_colony:
+        return redirect(url_for('list_colonies'))
+    
+    try:
+        # Find and remove the animal
+        animal = current_colony.get_animal(animal_id)
+        if animal:
+            # Remove parent-child relationships
+            if animal.mother:
+                animal.mother.children.remove(animal)
+            if animal.father:
+                animal.father.children.remove(animal)
+            
+            # Remove the animal from the colony
+            current_colony.animals.remove(animal)
+            
+            # Save the colony after deletion
+            save_colony(current_colony, current_colony.name)
+            print(f"Deleted animal {animal_id} from colony {current_colony.name}")
+        else:
+            print(f"Animal {animal_id} not found in colony {current_colony.name}")
+    except Exception as e:
+        print(f"Error deleting animal: {str(e)}")
+    
+    return redirect(url_for('view_colony'))
+
+@app.route('/edit_animal/<animal_id>', methods=['POST'])
+def edit_animal(animal_id):
+    """Edit an animal in the current colony"""
+    if not current_colony:
+        return redirect(url_for('list_colonies'))
+    
+    try:
+        # Find the animal
+        animal = current_colony.get_animal(animal_id)
+        if not animal:
+            print(f"Animal {animal_id} not found in colony {current_colony.name}")
+            return redirect(url_for('view_colony'))
+        
+        # Update animal properties
+        animal.sex = request.form['sex']
+        animal.genotype = request.form['genotype']
+        animal.dob = datetime.strptime(request.form['dob'], '%Y-%m-%d').date()
+        
+        # Update parent relationships
+        # First remove existing relationships
+        if animal.mother:
+            animal.mother.children.remove(animal)
+        if animal.father:
+            animal.father.children.remove(animal)
+        
+        # Set new relationships
+        mother_id = request.form.get('mother_id')
+        father_id = request.form.get('father_id')
+        
+        if mother_id:
+            mother = current_colony.get_animal(mother_id)
+            if mother:
+                animal.mother = mother
+                mother.children.append(animal)
+        
+        if father_id:
+            father = current_colony.get_animal(father_id)
+            if father:
+                animal.father = father
+                father.children.append(animal)
+        
+        # Save the colony after editing
+        save_colony(current_colony, current_colony.name)
+        print(f"Updated animal {animal_id} in colony {current_colony.name}")
+    except Exception as e:
+        print(f"Error editing animal: {str(e)}")
+    
+    return redirect(url_for('view_colony'))
+
 @app.route('/colony/rename/<old_name>', methods=['POST'])
 def rename_colony_file(old_name):
     """Rename a colony file"""
@@ -280,31 +362,80 @@ def rename_colony_file(old_name):
     except Exception as e:
         return f"Error renaming colony: {str(e)}", 500
 
+@app.route('/edit_animal_id', methods=['POST'])
+def edit_animal_id():
+    """Edit an animal's ID"""
+    if not current_colony:
+        return jsonify({'success': False, 'error': 'No colony loaded'})
+    
+    try:
+        old_id = request.form.get('old_id')
+        new_id = request.form.get('new_id')
+        
+        if not old_id or not new_id:
+            return jsonify({'success': False, 'error': 'Missing ID values'})
+        
+        # Find the animal
+        animal = current_colony.get_animal(old_id)
+        if not animal:
+            return jsonify({'success': False, 'error': 'Animal not found'})
+        
+        # Check if new ID already exists
+        if current_colony.get_animal(new_id):
+            return jsonify({'success': False, 'error': 'New ID already exists'})
+        
+        # Update the ID
+        animal.animal_id = new_id
+        
+        # Update references in parent-child relationships
+        if animal.mother:
+            animal.mother.children = [new_id if child == old_id else child for child in animal.mother.children]
+        if animal.father:
+            animal.father.children = [new_id if child == old_id else child for child in animal.father.children]
+        
+        # Save the colony
+        save_colony(current_colony, current_colony.name)
+        print(f"Updated animal ID from {old_id} to {new_id}")
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error updating animal ID: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
 if __name__ == '__main__':
     print("Starting Animal Colony Manager...")
     
-    # Create templates directory if it doesn't exist
-    if not os.path.exists('templates'):
-        print("Creating templates directory...")
-        os.makedirs('templates')
-    
-    # Start Qt application in a separate thread
-    print("Starting PyQt5 thread...")
-    qt_thread = Thread(target=run_qt)
-    qt_thread.daemon = True
-    qt_thread.start()
-    
-    # Start Dash server in a separate process
-    print("Starting Dash process...")
-    run_dash()
-    
-    # Wait a moment for servers to start
-    time.sleep(5)
-    
-    # Open the web browser
-    print("Opening web browser...")
-    webbrowser.open('http://localhost:5000')
-    
-    # Run Flask server
-    print("Starting Flask server...")
-    app.run(debug=False, port=5000) 
+    try:
+        # Create templates directory if it doesn't exist
+        if not os.path.exists('templates'):
+            print("Creating templates directory...")
+            os.makedirs('templates')
+        
+        # Start Dash server in a separate process
+        print("Starting Dash process...")
+        run_dash()
+        
+        # Wait a moment for servers to start
+        print("Waiting for servers to start...")
+        time.sleep(5)
+        
+        # Check if Dash server is running
+        if not is_dash_running():
+            print("Warning: Dash server may not have started properly")
+        
+        # Try to open the web browser
+        try:
+            print("Attempting to open web browser...")
+            webbrowser.open('http://localhost:5000')
+            print("Web browser opened successfully")
+        except Exception as e:
+            print(f"Warning: Could not open web browser automatically: {e}")
+            print("Please open http://localhost:5000 in your web browser manually")
+        
+        # Run Flask server
+        print("Starting Flask server...")
+        app.run(debug=False, port=5000)
+    except Exception as e:
+        print(f"Error starting the application: {e}")
+        print("Full error details:", sys.exc_info())
+        input("Press Enter to exit...")  # Keep the window open to see the error 

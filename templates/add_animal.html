@@ -2,65 +2,124 @@
 
 {% block content %}
 <div class="row">
-    <div class="col-md-6 offset-md-3">
-        <div class="card">
-            <div class="card-body">
-                <h2 class="card-title mb-4">Add New Animal</h2>
-                <form method="post">
-                    <div class="mb-3">
-                        <label for="animal_id" class="form-label">Animal ID</label>
-                        <input type="text" class="form-control" id="animal_id" name="animal_id" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="sex" class="form-label">Sex</label>
-                        <select class="form-select" id="sex" name="sex" required>
-                            <option value="M">Male</option>
-                            <option value="F">Female</option>
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="genotype" class="form-label">Genotype</label>
-                        <input type="text" class="form-control" id="genotype" name="genotype" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="dob" class="form-label">Date of Birth</label>
-                        <input type="date" class="form-control" id="dob" name="dob" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="mother_id" class="form-label">Mother ID (Optional)</label>
-                        <select class="form-select" id="mother_id" name="mother_id">
-                            <option value="">None</option>
-                            {% for animal in colony.animals %}
-                            {% if animal.sex == 'F' %}
-                            <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
-                            {% endif %}
-                            {% endfor %}
-                        </select>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="father_id" class="form-label">Father ID (Optional)</label>
-                        <select class="form-select" id="father_id" name="father_id">
-                            <option value="">None</option>
-                            {% for animal in colony.animals %}
-                            {% if animal.sex == 'M' %}
-                            <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
-                            {% endif %}
-                            {% endfor %}
-                        </select>
-                    </div>
-                    
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">Add Animal</button>
-                        <a href="{{ url_for('view_colony') }}" class="btn btn-secondary">Cancel</a>
-                    </div>
-                </form>
-            </div>
-        </div>
+    <div class="col-md-12">
+        <h1 class="mb-4">Add New Animal</h1>
     </div>
 </div>
+
+<div class="row">
+    <div class="col-md-6">
+        <form id="addAnimalForm" method="post">
+            <div class="mb-3">
+                <label for="animalId" class="form-label">Animal ID</label>
+                <input type="text" class="form-control" id="animalId" name="animal_id" required>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Sex</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="sex" id="male" value="M" required>
+                    <label class="form-check-label" for="male">Male</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="sex" id="female" value="F">
+                    <label class="form-check-label" for="female">Female</label>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Genotype</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="genotype" id="homo" value="Homo (+/+)">
+                    <label class="form-check-label" for="homo">Homo (+/+)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="genotype" id="het" value="Het (+/-)">
+                    <label class="form-check-label" for="het">Het (+/-)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="genotype" id="wt" value="WT (-/-)">
+                    <label class="form-check-label" for="wt">WT (-/-)</label>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="dob" class="form-label">Date of Birth</label>
+                <input type="date" class="form-control" id="dob" name="dob" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="motherId" class="form-label">Mother ID (Optional)</label>
+                <select class="form-select" id="motherId" name="mother_id">
+                    <option value="">None</option>
+                    {% for animal in colony.animals %}
+                    {% if animal.sex == 'F' %}
+                    <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="fatherId" class="form-label">Father ID (Optional)</label>
+                <select class="form-select" id="fatherId" name="father_id">
+                    <option value="">None</option>
+                    {% for animal in colony.animals %}
+                    {% if animal.sex == 'M' %}
+                    <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Add Animal</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('addAnimalForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Check if required fields are filled
+    const animalId = document.getElementById('animalId').value;
+    const sex = document.querySelector('input[name="sex"]:checked');
+    const genotype = document.querySelector('input[name="genotype"]:checked');
+    const dob = document.getElementById('dob').value;
+    
+    if (!animalId || !sex || !genotype || !dob) {
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
+    
+    // Convert empty strings to null for optional fields
+    if (data.mother_id === '') data.mother_id = null;
+    if (data.father_id === '') data.father_id = null;
+    
+    fetch('/add_animal', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = '/colony';
+        } else {
+            alert('Error: ' + (data.error || 'Failed to add animal'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error adding animal. Please try again.');
+    });
+});
+</script>
 {% endblock %} 
