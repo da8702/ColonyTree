@@ -9,26 +9,28 @@ from datetime import datetime
 import requests
 import subprocess
 from models import Animal, Colony
+import traceback
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Create Flask app
 app = Flask(__name__)
+app.secret_key = 'your-secret-key-here'  # Required for flash messages
 
 # Global variable to store current colony
 current_colony = None
+colonies_dir = 'colonies'
+
+# Ensure colonies directory exists
+if not os.path.exists(colonies_dir):
+    os.makedirs(colonies_dir)
 
 def run_dash():
-    """Run the Dash application"""
-    global dash_process
-    try:
-        print("Starting Dash application...")
-        # Run Dash in a separate process
-        dash_process = subprocess.Popen([sys.executable, 'tree_visualization.py'],
-                                      stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE)
-        print("Dash process started with PID:", dash_process.pid)
-    except Exception as e:
-        print(f"Error starting Dash application: {e}")
-        print("Full error details:", sys.exc_info())
+    """Run the Dash server in a separate process"""
+    subprocess.Popen(['python', 'tree_visualization.py'])
 
 def is_dash_running():
     """Check if the Dash server is running"""
@@ -126,14 +128,6 @@ def new_colony():
         name = request.form['name']
         global current_colony
         current_colony = Colony(name)
-        
-        # Save the empty colony immediately
-        try:
-            save_colony(current_colony, name)
-            print(f"Created and saved new empty colony: {name}")
-        except Exception as e:
-            print(f"Error saving new colony: {str(e)}")
-        
         return redirect(url_for('view_colony'))
     return render_template('new_colony.html')
 
@@ -269,9 +263,9 @@ def delete_animal(animal_id):
         if animal:
             # Remove parent-child relationships
             if animal.mother:
-                animal.mother.children = [child for child in animal.mother.children if child != animal_id]
+                animal.mother.children.remove(animal)
             if animal.father:
-                animal.father.children = [child for child in animal.father.children if child != animal_id]
+                animal.father.children.remove(animal)
             
             # Remove the animal from the colony
             current_colony.animals.remove(animal)
@@ -291,14 +285,14 @@ def edit_animal(animal_id):
     """Edit an animal in the current colony"""
     if not current_colony:
         return redirect(url_for('list_colonies'))
-    
+
     try:
         # Find the animal
         animal = current_colony.get_animal(animal_id)
         if not animal:
             print(f"Animal {animal_id} not found in colony {current_colony.name}")
             return redirect(url_for('view_colony'))
-        
+
         # Update animal properties
         animal.sex = request.form['sex']
         animal.genotype = request.form['genotype']
@@ -310,7 +304,7 @@ def edit_animal(animal_id):
             animal.mother.children.remove(animal)
         if animal.father:
             animal.father.children.remove(animal)
-        
+
         # Set new relationships
         mother_id = request.form.get('mother_id')
         father_id = request.form.get('father_id')
@@ -326,13 +320,13 @@ def edit_animal(animal_id):
             if father:
                 animal.father = father
                 father.children.append(animal)
-        
+
         # Save the colony after editing
         save_colony(current_colony, current_colony.name)
         print(f"Updated animal {animal_id} in colony {current_colony.name}")
     except Exception as e:
         print(f"Error editing animal: {str(e)}")
-    
+
     return redirect(url_for('view_colony'))
 
 @app.route('/colony/rename/<old_name>', methods=['POST'])
@@ -345,14 +339,14 @@ def rename_colony_file(old_name):
     # Ensure the colonies directory exists
     if not os.path.exists('colonies'):
         os.makedirs('colonies')
-    
+
     old_path = os.path.join('colonies', f'{old_name}.json')
     new_path = os.path.join('colonies', f'{new_name}.json')
-    
+
     # Check if the old file exists
     if not os.path.exists(old_path):
         return "Error: Colony file not found", 404
-    
+
     # Check if the new name already exists
     if os.path.exists(new_path):
         return "Error: A colony with this name already exists", 400
@@ -437,6 +431,28 @@ def edit_animal_id():
     except Exception as e:
         print(f"Error updating animal ID: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/tree')
+def tree_visualization():
+    """Open the tree visualization in a new tab"""
+    try:
+        logger.debug("Opening tree visualization")
+        if not current_colony:
+            logger.warning("No colony loaded")
+            flash("No colony loaded", 'error')
+            return redirect(url_for('colonies'))
+        
+        # Start the Dash server in a separate thread if it's not already running
+        from tree_visualization import run_dash_server
+        run_dash_server(current_colony)
+        
+        # Redirect to the Dash app URL
+        return redirect('http://127.0.0.1:8050')
+    except Exception as e:
+        logger.error(f"Error opening tree visualization: {str(e)}")
+        logger.error(traceback.format_exc())
+        flash(f"Error opening tree visualization: {str(e)}", 'error')
+        return redirect(url_for('view_colony'))
 
 if __name__ == '__main__':
     print("Starting Animal Colony Manager...")
