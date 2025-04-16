@@ -65,20 +65,71 @@
                         <div class="modal-dialog">
                             <div class="modal-content">
                                 <div class="modal-header">
-                                    <h5 class="modal-title">Edit Animal ID</h5>
+                                    <h5 class="modal-title">Edit Animal</h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                 </div>
                                 <div class="modal-body">
-                                    <form id="editAnimalForm{{ animal.animal_id }}" class="edit-animal-form">
-                                        <input type="hidden" name="old_id" value="{{ animal.animal_id }}">
+                                    <form id="editAnimalForm{{ animal.animal_id }}" class="edit-animal-form" action="{{ url_for('edit_animal', animal_id=animal.animal_id) }}" method="post">
                                         <div class="mb-3">
-                                            <label for="newId{{ animal.animal_id }}" class="form-label">New Animal ID</label>
+                                            <label for="animalId{{ animal.animal_id }}" class="form-label">Animal ID</label>
                                             <input type="text" 
                                                    class="form-control" 
-                                                   id="newId{{ animal.animal_id }}" 
-                                                   name="new_id" 
+                                                   id="animalId{{ animal.animal_id }}" 
+                                                   name="animal_id" 
                                                    value="{{ animal.animal_id }}" 
                                                    required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="sex{{ animal.animal_id }}" class="form-label">Sex</label>
+                                            <select class="form-select" id="sex{{ animal.animal_id }}" name="sex" required>
+                                                <option value="M" {% if animal.sex == 'M' %}selected{% endif %}>Male</option>
+                                                <option value="F" {% if animal.sex == 'F' %}selected{% endif %}>Female</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="genotype{{ animal.animal_id }}" class="form-label">Genotype</label>
+                                            <select class="form-select" id="genotype{{ animal.animal_id }}" name="genotype" required>
+                                                <option value="Homo (+/+)" {% if animal.genotype == 'Homo (+/+)' %}selected{% endif %}>Homo (+/+)</option>
+                                                <option value="Het (+/-)" {% if animal.genotype == 'Het (+/-)' %}selected{% endif %}>Het (+/-)</option>
+                                                <option value="WT (-/-)" {% if animal.genotype == 'WT (-/-)' %}selected{% endif %}>WT (-/-)</option>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="dob{{ animal.animal_id }}" class="form-label">Date of Birth</label>
+                                            <input type="date" 
+                                                   class="form-control" 
+                                                   id="dob{{ animal.animal_id }}" 
+                                                   name="dob" 
+                                                   value="{{ animal.dob.strftime('%Y-%m-%d') }}" 
+                                                   required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="mother{{ animal.animal_id }}" class="form-label">Mother</label>
+                                            <select class="form-select" id="mother{{ animal.animal_id }}" name="mother_id">
+                                                <option value="">None</option>
+                                                {% for potential_mother in colony.animals %}
+                                                    {% if potential_mother.sex == 'F' and potential_mother.animal_id != animal.animal_id %}
+                                                        <option value="{{ potential_mother.animal_id }}" 
+                                                            {% if animal.mother and animal.mother.animal_id == potential_mother.animal_id %}selected{% endif %}>
+                                                            {{ potential_mother.animal_id }}
+                                                        </option>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="father{{ animal.animal_id }}" class="form-label">Father</label>
+                                            <select class="form-select" id="father{{ animal.animal_id }}" name="father_id">
+                                                <option value="">None</option>
+                                                {% for potential_father in colony.animals %}
+                                                    {% if potential_father.sex == 'M' and potential_father.animal_id != animal.animal_id %}
+                                                        <option value="{{ potential_father.animal_id }}"
+                                                            {% if animal.father and animal.father.animal_id == potential_father.animal_id %}selected{% endif %}>
+                                                            {{ potential_father.animal_id }}
+                                                        </option>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </select>
                                         </div>
                                     </form>
                                 </div>
@@ -159,28 +210,57 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Handle animal ID edit form submissions
+    // Handle animal edit form submissions
     document.querySelectorAll('.edit-animal-form').forEach(form => {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-            
+
             const formData = new FormData(this);
             
-            fetch('/edit_animal_id', {
+            // --- Alternative way to get animalId ---
+            const formId = this.id; // e.g., "editAnimalForm123"
+            const animalIdSuffix = formId.replace('editAnimalForm', ''); // e.g., "123"
+            const inputId = 'animalId' + animalIdSuffix; // e.g., "animalId123"
+            const animalIdInput = document.getElementById(inputId);
+            // --- End of alternative way ---
+
+            if (!animalIdInput) {
+                console.error(`Could not find animal_id input with ID: ${inputId} in the form with ID: ${formId}.`);
+                alert("Error: Could not identify the animal to edit. Input element not found.");
+                return;
+            }
+            const animalId = animalIdInput.value; // Get value from the found input
+
+            // Ensure animalId is part of the URL, not necessarily needed in formData if handled by URL
+            // formData.append('animal_id', animalId); // Might not be needed if ID is only in URL
+
+            fetch(`/edit_animal/${animalId}`, { // Use the extracted animalId in the URL
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
+            .then(response => {
+                if (response.redirected) {
+                    // If the server redirected, follow it
+                    window.location.href = response.url;
+                } else if (response.ok) {
+                    // If the server responded with success (e.g., 200 OK) but didn't redirect,
+                    // reload the page to show potential updates (though redirect is expected)
+                    console.log("Server responded OK but did not redirect. Reloading page.");
                     window.location.reload();
                 } else {
-                    alert('Error: ' + (data.error || 'Failed to update animal ID'));
+                    // If the server responded with an error status (e.g., 4xx, 5xx)
+                    console.error('Server responded with an error:', response.status, response.statusText);
+                    response.text().then(text => { // Try to get error message from response body
+                        alert(`Error updating animal: ${response.status} ${response.statusText}\\n${text}`);
+                    }).catch(() => { // Fallback if response body can't be read
+                        alert(`Error updating animal: ${response.status} ${response.statusText}`);
+                    });
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                alert('Error updating animal ID. Please try again.');
+                // Network errors or other issues with the fetch itself
+                console.error('Fetch error:', error);
+                alert('Network error updating animal. Please check your connection and try again.');
             });
         });
     });
