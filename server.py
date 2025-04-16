@@ -566,6 +566,92 @@ def tree_visualization():
         flash(f"Error opening tree visualization: {str(e)}", 'error')
         return redirect(url_for('view_colony'))
 
+@app.route('/add_cage', methods=['GET', 'POST'])
+def add_cage():
+    """Add a new cage with multiple animals to the current colony"""
+    if not current_colony:
+        return redirect(url_for('list_colonies'))
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            cage_id = data.get('cage_id')
+            num_animals = int(data.get('num_animals', 1))
+            sex = data.get('sex')
+            genotype = data.get('genotype')
+            dob = datetime.strptime(data.get('dob'), '%Y-%m-%d')
+            date_weaned = None
+            if data.get('date_weaned'):
+                date_weaned = datetime.strptime(data.get('date_weaned'), '%Y-%m-%d')
+            mother_id = data.get('mother_id')
+            father_id = data.get('father_id')
+            notes = data.get('notes')
+            
+            # Get parent objects if IDs provided
+            mother = None
+            if mother_id:
+                mother = current_colony.get_animal(mother_id)
+                
+            father = None
+            if father_id:
+                father = current_colony.get_animal(father_id)
+            
+            # Create the specified number of animals
+            created_animals = []
+            for i in range(1, num_animals + 1):
+                # Generate animal ID based on cage ID
+                animal_id = f"{cage_id}_{i}"
+                
+                # Check if an animal with this ID already exists
+                if current_colony.get_animal(animal_id):
+                    return jsonify({
+                        'success': False, 
+                        'error': f'Animal with ID {animal_id} already exists'
+                    })
+                
+                # Create the animal
+                animal = Animal(
+                    animal_id=animal_id,
+                    sex=sex,
+                    genotype=genotype,
+                    dob=dob,
+                    mother=mother,
+                    father=father,
+                    notes=notes,
+                    cage_id=cage_id,
+                    date_weaned=date_weaned
+                )
+                
+                current_colony.add_animal(animal)
+                created_animals.append(animal_id)
+            
+            # Save the colony after adding the animals
+            try:
+                save_colony(current_colony, current_colony.name)
+                print(f"Saved colony after adding cage {cage_id} with {num_animals} animals")
+                
+                # Return success with list of created animal IDs
+                return jsonify({
+                    'success': True,
+                    'message': f'Created {num_animals} animals in cage {cage_id}',
+                    'animals': created_animals
+                })
+            except Exception as save_error:
+                print(f"Error saving colony: {str(save_error)}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Error saving colony: {str(save_error)}'
+                })
+            
+        except Exception as e:
+            print(f"Error adding cage: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': str(e)
+            })
+    
+    return render_template('add_cage.html', colony=current_colony)
+
 if __name__ == '__main__':
     print("Starting Animal Colony Manager...")
     
