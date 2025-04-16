@@ -37,20 +37,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     'shape': 'ellipse',
                     'width': '100px',
                     'height': '40px',
-                    'padding': '5px'
+                    'padding': '5px',
+                    'color': '#000000'  // Default text color
                 }
             },
             {
                 selector: 'node[sex="M"]',
                 style: {
-                    'shape': 'rectangle',
-                    'background-color': '#e6f3ff'
+                    'shape': 'rectangle'
                 }
             },
             {
-                selector: 'node[sex="F"]',
+                selector: 'node[genotype="Homo (+/+)"]',
                 style: {
-                    'background-color': '#ffe6e6'
+                    'background-color': '#3498db',  // Blue for Homo
+                    'color': '#ffffff'  // White text for contrast
+                }
+            },
+            {
+                selector: 'node[genotype="Het (+/-)"]',
+                style: {
+                    'background-color': '#2ecc71',  // Green for Het
+                    'color': '#ffffff'  // White text for contrast
+                }
+            },
+            {
+                selector: 'node[genotype="WT (-/-)"]',
+                style: {
+                    'background-color': '#e74c3c',  // Red for WT
+                    'color': '#ffffff'  // White text for contrast
                 }
             },
             {
@@ -162,13 +177,19 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('/api/colony')
         .then(response => response.json())
         .then(data => {
+            // Debug: Log the first animal's data
+            if (data.animals && data.animals.length > 0) {
+                console.log("First animal data:", data.animals[0]);
+            }
+            
             // Create nodes
             data.animals.forEach(animal => {
                 cy.add({
                     data: {
                         id: animal.animal_id,
                         label: `${animal.animal_id}\n${animal.genotype}`,
-                        sex: animal.sex
+                        sex: animal.sex,
+                        genotype: animal.genotype
                     }
                 });
             });
