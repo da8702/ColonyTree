@@ -49,6 +49,23 @@
             </div>
 
             <div class="mb-3">
+                <label for="dateWeaned" class="form-label">Date Weaned</label>
+                <input type="date" class="form-control" id="dateWeaned" name="date_weaned">
+            </div>
+
+            <div class="mb-3">
+                <label for="cageId" class="form-label">Cage ID</label>
+                <input type="text" class="form-control" id="cageId" name="cage_id" list="cageIdList" required>
+                {% if colony.get_unique_cage_ids() %}
+                <datalist id="cageIdList">
+                    {% for cage in colony.get_unique_cage_ids() %}
+                    <option value="{{ cage }}">
+                    {% endfor %}
+                </datalist>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
                 <label for="motherId" class="form-label">Mother ID (Optional)</label>
                 <select class="form-select" id="motherId" name="mother_id">
                     <option value="">None</option>
@@ -72,6 +89,11 @@
                 </select>
             </div>
 
+            <div class="mb-3">
+                <label for="notes" class="form-label">Notes (Optional)</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+            </div>
+
             <button type="submit" class="btn btn-primary">Add Animal</button>
         </form>
     </div>
@@ -88,18 +110,28 @@ document.getElementById('addAnimalForm').addEventListener('submit', function(e) 
     const sex = document.querySelector('input[name="sex"]:checked');
     const genotype = document.querySelector('input[name="genotype"]:checked');
     const dob = document.getElementById('dob').value;
+    const cageId = document.getElementById('cageId').value;
     
-    if (!animalId || !sex || !genotype || !dob) {
+    if (!animalId || !sex || !genotype || !dob || !cageId) {
         alert('Please fill in all required fields');
         return;
     }
     
-    const formData = new FormData(this);
-    const data = Object.fromEntries(formData.entries());
+    // Create data object manually to ensure proper structure
+    const data = {
+        animal_id: animalId,
+        sex: sex.value,
+        genotype: genotype.value,
+        dob: dob,
+        date_weaned: document.getElementById('dateWeaned').value || null,
+        cage_id: cageId,
+        mother_id: document.getElementById('motherId').value || null,
+        father_id: document.getElementById('fatherId').value || null,
+        notes: document.getElementById('notes').value || null
+    };
     
-    // Convert empty strings to null for optional fields
-    if (data.mother_id === '') data.mother_id = null;
-    if (data.father_id === '') data.father_id = null;
+    // Log data being sent for debugging
+    console.log('Sending data:', data);
     
     fetch('/add_animal', {
         method: 'POST',
@@ -108,7 +140,14 @@ document.getElementById('addAnimalForm').addEventListener('submit', function(e) 
         },
         body: JSON.stringify(data)
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            return response.text().then(text => {
+                throw new Error(text || response.statusText);
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             window.location.href = '/colony';
@@ -118,7 +157,7 @@ document.getElementById('addAnimalForm').addEventListener('submit', function(e) 
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Error adding animal. Please try again.');
+        alert('Error adding animal: ' + error.message);
     });
 });
 </script>

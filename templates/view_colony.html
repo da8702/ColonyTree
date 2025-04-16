@@ -29,6 +29,8 @@
                         <th>Sex</th>
                         <th>Genotype</th>
                         <th>Date of Birth</th>
+                        <th>Date Weaned</th>
+                        <th>Cage ID</th>
                         <th>Mother</th>
                         <th>Father</th>
                         <th></th>
@@ -41,13 +43,24 @@
                             <a href="#" 
                                class="text-decoration-none" 
                                data-bs-toggle="modal" 
-                               data-bs-target="#editAnimalModal{{ animal.animal_id }}">
+                               data-bs-target="#editAnimalModal{{ animal.animal_id }}"
+                               data-animal-id="{{ animal.animal_id }}"
+                               data-sex="{{ animal.sex }}"
+                               data-genotype="{{ animal.genotype }}"
+                               data-dob="{{ animal.dob.strftime('%Y-%m-%d') }}"
+                               data-date-weaned="{{ animal.date_weaned.strftime('%Y-%m-%d') if animal.date_weaned else '' }}"
+                               data-mother-id="{{ animal.mother.animal_id if animal.mother else 'none' }}"
+                               data-father-id="{{ animal.father.animal_id if animal.father else 'none' }}"
+                               data-cage-id="{{ animal.cage_id }}"
+                               data-notes="{{ animal.notes }}">
                                 {{ animal.animal_id }}
                             </a>
                         </td>
                         <td>{{ animal.sex }}</td>
                         <td>{{ animal.genotype }}</td>
                         <td>{{ animal.dob.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ animal.date_weaned.strftime('%Y-%m-%d') if animal.date_weaned else '-' }}</td>
+                        <td>{{ animal.cage_id }}</td>
                         <td>{{ animal.mother.animal_id if animal.mother else '-' }}</td>
                         <td>{{ animal.father.animal_id if animal.father else '-' }}</td>
                         <td>
@@ -61,51 +74,48 @@
                     </tr>
 
                     <!-- Edit Animal Modal -->
-                    <div class="modal fade" id="editAnimalModal{{ animal.animal_id }}" tabindex="-1">
-                        <div class="modal-dialog">
+                    <div class="modal fade" id="editAnimalModal{{ animal.animal_id }}" tabindex="-1" role="dialog" aria-labelledby="editAnimalModalLabel{{ animal.animal_id }}" aria-hidden="true">
+                        <div class="modal-dialog modal-lg" role="document">
                             <div class="modal-content">
                                 <div class="modal-header">
-                                    <h5 class="modal-title">Edit Animal</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    <h5 class="modal-title" id="editAnimalModalLabel{{ animal.animal_id }}">Edit Animal</h5>
+                                    <button type="button" class="close" data-bs-dismiss="modal" aria-label="Close">
+                                        <span aria-hidden="true">&times;</span>
+                                    </button>
                                 </div>
                                 <div class="modal-body">
-                                    <form id="editAnimalForm{{ animal.animal_id }}" class="edit-animal-form" action="{{ url_for('edit_animal', animal_id=animal.animal_id) }}" method="post">
-                                        <div class="mb-3">
-                                            <label for="animalId{{ animal.animal_id }}" class="form-label">Animal ID</label>
-                                            <input type="text" 
-                                                   class="form-control" 
-                                                   id="animalId{{ animal.animal_id }}" 
-                                                   name="animal_id" 
-                                                   value="{{ animal.animal_id }}" 
-                                                   required>
+                                    <form id="editAnimalForm{{ animal.animal_id }}" method="POST" class="edit-animal-form" action="{{ url_for('edit_animal', animal_id=animal.animal_id) }}">
+                                        <input type="hidden" id="originalAnimalId{{ animal.animal_id }}" name="original_id" value="{{ animal.animal_id }}">
+                                        <div class="form-group">
+                                            <label for="editAnimalId{{ animal.animal_id }}">Animal ID</label>
+                                            <input type="text" class="form-control" id="editAnimalId{{ animal.animal_id }}" name="animal_id" value="{{ animal.animal_id }}" required>
                                         </div>
-                                        <div class="mb-3">
-                                            <label for="sex{{ animal.animal_id }}" class="form-label">Sex</label>
-                                            <select class="form-select" id="sex{{ animal.animal_id }}" name="sex" required>
+                                        <div class="form-group">
+                                            <label for="editSex{{ animal.animal_id }}">Sex</label>
+                                            <select class="form-control" id="editSex{{ animal.animal_id }}" name="sex" required>
                                                 <option value="M" {% if animal.sex == 'M' %}selected{% endif %}>Male</option>
                                                 <option value="F" {% if animal.sex == 'F' %}selected{% endif %}>Female</option>
                                             </select>
                                         </div>
-                                        <div class="mb-3">
-                                            <label for="genotype{{ animal.animal_id }}" class="form-label">Genotype</label>
-                                            <select class="form-select" id="genotype{{ animal.animal_id }}" name="genotype" required>
+                                        <div class="form-group">
+                                            <label for="editGenotype{{ animal.animal_id }}">Genotype</label>
+                                            <select class="form-control" id="editGenotype{{ animal.animal_id }}" name="genotype" required>
                                                 <option value="Homo (+/+)" {% if animal.genotype == 'Homo (+/+)' %}selected{% endif %}>Homo (+/+)</option>
                                                 <option value="Het (+/-)" {% if animal.genotype == 'Het (+/-)' %}selected{% endif %}>Het (+/-)</option>
                                                 <option value="WT (-/-)" {% if animal.genotype == 'WT (-/-)' %}selected{% endif %}>WT (-/-)</option>
                                             </select>
                                         </div>
-                                        <div class="mb-3">
-                                            <label for="dob{{ animal.animal_id }}" class="form-label">Date of Birth</label>
-                                            <input type="date" 
-                                                   class="form-control" 
-                                                   id="dob{{ animal.animal_id }}" 
-                                                   name="dob" 
-                                                   value="{{ animal.dob.strftime('%Y-%m-%d') }}" 
-                                                   required>
+                                        <div class="form-group">
+                                            <label for="editDob{{ animal.animal_id }}">Date of Birth</label>
+                                            <input type="date" class="form-control" id="editDob{{ animal.animal_id }}" name="dob" value="{{ animal.dob.strftime('%Y-%m-%d') }}" required>
                                         </div>
-                                        <div class="mb-3">
-                                            <label for="mother{{ animal.animal_id }}" class="form-label">Mother</label>
-                                            <select class="form-select" id="mother{{ animal.animal_id }}" name="mother_id">
+                                        <div class="form-group">
+                                            <label for="editDateWeaned{{ animal.animal_id }}">Date Weaned</label>
+                                            <input type="date" class="form-control" id="editDateWeaned{{ animal.animal_id }}" name="date_weaned" value="{{ animal.date_weaned.strftime('%Y-%m-%d') if animal.date_weaned else '' }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="editMother{{ animal.animal_id }}">Mother</label>
+                                            <select class="form-control" id="editMother{{ animal.animal_id }}" name="mother_id">
                                                 <option value="">None</option>
                                                 {% for potential_mother in colony.animals %}
                                                     {% if potential_mother.sex == 'F' and potential_mother.animal_id != animal.animal_id %}
@@ -117,9 +127,9 @@
                                                 {% endfor %}
                                             </select>
                                         </div>
-                                        <div class="mb-3">
-                                            <label for="father{{ animal.animal_id }}" class="form-label">Father</label>
-                                            <select class="form-select" id="father{{ animal.animal_id }}" name="father_id">
+                                        <div class="form-group">
+                                            <label for="editFather{{ animal.animal_id }}">Father</label>
+                                            <select class="form-control" id="editFather{{ animal.animal_id }}" name="father_id">
                                                 <option value="">None</option>
                                                 {% for potential_father in colony.animals %}
                                                     {% if potential_father.sex == 'M' and potential_father.animal_id != animal.animal_id %}
@@ -131,15 +141,19 @@
                                                 {% endfor %}
                                             </select>
                                         </div>
+                                        <div class="form-group">
+                                            <label for="editCageId{{ animal.animal_id }}">Cage ID</label>
+                                            <input type="text" class="form-control" id="editCageId{{ animal.animal_id }}" name="cage_id" value="{{ animal.cage_id }}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="editNotes{{ animal.animal_id }}">Notes</label>
+                                            <textarea class="form-control" id="editNotes{{ animal.animal_id }}" name="notes" rows="3">{{ animal.notes }}</textarea>
+                                        </div>
                                     </form>
                                 </div>
                                 <div class="modal-footer">
                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                    <button type="submit" 
-                                            form="editAnimalForm{{ animal.animal_id }}" 
-                                            class="btn btn-primary">
-                                        Save Changes
-                                    </button>
+                                    <button type="submit" form="editAnimalForm{{ animal.animal_id }}" class="btn btn-primary">Save Changes</button>
                                 </div>
                             </div>
                         </div>
@@ -209,58 +223,91 @@
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+$(document).ready(function() {
+    // Handle clicking on animal ID to edit
+    $('.animal-id-link').click(function(e) {
+        e.preventDefault();
+        
+        // Get the animal data from data attributes
+        const animalId = $(this).data('animal-id');
+        const sex = $(this).data('sex');
+        const genotype = $(this).data('genotype');
+        const dob = $(this).data('dob');
+        const dateWeaned = $(this).data('date-weaned') || "";
+        const motherId = $(this).data('mother-id') || "";
+        const fatherId = $(this).data('father-id') || "";
+        const cageId = $(this).data('cage-id') || "";
+        const notes = $(this).data('notes') || "";
+        
+        // Populate the form fields
+        $('#originalAnimalId' + animalId).val(animalId);
+        $('#editAnimalId' + animalId).val(animalId);
+        $('#editSex' + animalId).val(sex);
+        $('#editGenotype' + animalId).val(genotype);
+        $('#editDob' + animalId).val(dob);
+        $('#editDateWeaned' + animalId).val(dateWeaned);
+        $('#editMother' + animalId).val(motherId);
+        $('#editFather' + animalId).val(fatherId);
+        $('#editCageId' + animalId).val(cageId);
+        $('#editNotes' + animalId).val(notes);
+        
+        // Open the modal
+        $('#editAnimalModal' + animalId).modal('show');
+    });
+    
     // Handle animal edit form submissions
     document.querySelectorAll('.edit-animal-form').forEach(form => {
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-
-            const formData = new FormData(this);
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            console.log('Form submission triggered');
             
-            // --- Alternative way to get animalId ---
-            const formId = this.id; // e.g., "editAnimalForm123"
-            const animalIdSuffix = formId.replace('editAnimalForm', ''); // e.g., "123"
-            const inputId = 'animalId' + animalIdSuffix; // e.g., "animalId123"
-            const animalIdInput = document.getElementById(inputId);
-            // --- End of alternative way ---
-
-            if (!animalIdInput) {
-                console.error(`Could not find animal_id input with ID: ${inputId} in the form with ID: ${formId}.`);
-                alert("Error: Could not identify the animal to edit. Input element not found.");
-                return;
-            }
-            const animalId = animalIdInput.value; // Get value from the found input
-
-            // Ensure animalId is part of the URL, not necessarily needed in formData if handled by URL
-            // formData.append('animal_id', animalId); // Might not be needed if ID is only in URL
-
-            fetch(`/edit_animal/${animalId}`, { // Use the extracted animalId in the URL
+            const animalId = this.querySelector('[name="original_id"]').value;
+            console.log('Original animal ID:', animalId);
+            
+            // Create data object manually
+            const data = {
+                animal_id: this.querySelector('[name="animal_id"]').value,
+                original_id: this.querySelector('[name="original_id"]').value,
+                sex: this.querySelector('[name="sex"]').value,
+                genotype: this.querySelector('[name="genotype"]').value,
+                dob: this.querySelector('[name="dob"]').value,
+                date_weaned: this.querySelector('[name="date_weaned"]').value || null,
+                cage_id: this.querySelector('[name="cage_id"]').value || null,
+                mother_id: this.querySelector('[name="mother_id"]').value || null,
+                father_id: this.querySelector('[name="father_id"]').value || null,
+                notes: this.querySelector('[name="notes"]').value || null
+            };
+            
+            console.log('Sending data:', data);
+            
+            fetch(`/edit_animal/${animalId}`, {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
             })
             .then(response => {
-                if (response.redirected) {
-                    // If the server redirected, follow it
-                    window.location.href = response.url;
-                } else if (response.ok) {
-                    // If the server responded with success (e.g., 200 OK) but didn't redirect,
-                    // reload the page to show potential updates (though redirect is expected)
-                    console.log("Server responded OK but did not redirect. Reloading page.");
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        console.error('Error response:', text);
+                        throw new Error(text || response.statusText);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                if (data.success) {
                     window.location.reload();
                 } else {
-                    // If the server responded with an error status (e.g., 4xx, 5xx)
-                    console.error('Server responded with an error:', response.status, response.statusText);
-                    response.text().then(text => { // Try to get error message from response body
-                        alert(`Error updating animal: ${response.status} ${response.statusText}\\n${text}`);
-                    }).catch(() => { // Fallback if response body can't be read
-                        alert(`Error updating animal: ${response.status} ${response.statusText}`);
-                    });
+                    alert('Error: ' + (data.error || 'Failed to update animal'));
                 }
             })
             .catch(error => {
-                // Network errors or other issues with the fetch itself
-                console.error('Fetch error:', error);
-                alert('Network error updating animal. Please check your connection and try again.');
+                console.error('Error:', error);
+                alert('Error updating animal: ' + error.message);
             });
         });
     });

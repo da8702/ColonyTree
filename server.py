@@ -1,11 +1,11 @@
-from flask import Flask, render_template, send_file, Response, request, jsonify, redirect, url_for
+from flask import Flask, render_template, send_file, Response, request, jsonify, redirect, url_for, session, flash
 import os
 import json
 from threading import Thread
 import sys
 import webbrowser
 import time
-from datetime import datetime
+from datetime import datetime, date
 import requests
 import subprocess
 from models import Animal, Colony
@@ -57,7 +57,10 @@ def save_colony(colony, filename):
             'genotype': animal.genotype,
             'dob': animal.dob.isoformat(),
             'mother_id': animal.mother.animal_id if animal.mother else None,
-            'father_id': animal.father.animal_id if animal.father else None
+            'father_id': animal.father.animal_id if animal.father else None,
+            'notes': animal.notes if hasattr(animal, 'notes') else None,
+            'cage_id': animal.cage_id if hasattr(animal, 'cage_id') else None,
+            'date_weaned': animal.date_weaned.isoformat() if hasattr(animal, 'date_weaned') and animal.date_weaned else None
         }
         data['animals'].append(animal_data)
     
@@ -79,13 +82,28 @@ def load_colony(filename):
             dob_str = dob_str.split('T')[0]  # Take just the date part
         dob = datetime.strptime(dob_str, '%Y-%m-%d').date()
         
+        # Parse date weaned if it exists
+        date_weaned = None
+        if animal_data.get('date_weaned'):
+            date_weaned_str = animal_data['date_weaned']
+            if 'T' in date_weaned_str:  # If it's a datetime string
+                date_weaned_str = date_weaned_str.split('T')[0]  # Take just the date part
+            date_weaned = datetime.strptime(date_weaned_str, '%Y-%m-%d').date()
+        
+        # Get optional fields with fallbacks
+        cage_id = animal_data.get('cage_id')
+        notes = animal_data.get('notes')
+        
         animal = Animal(
             animal_data['animal_id'],
             animal_data['sex'],
             animal_data['genotype'],
             dob,
             None,  # mother will be set in second pass
-            None   # father will be set in second pass
+            None,  # father will be set in second pass
+            notes,
+            cage_id,
+            date_weaned
         )
         colony.add_animal(animal)
     
@@ -174,9 +192,16 @@ def add_animal():
             dob = datetime.strptime(data.get('dob'), '%Y-%m-%d')
             mother_id = data.get('mother_id')
             father_id = data.get('father_id')
+            cage_id = data.get('cage_id')
+            notes = data.get('notes')
+            
+            # Parse date_weaned if provided
+            date_weaned = None
+            if data.get('date_weaned'):
+                date_weaned = datetime.strptime(data.get('date_weaned'), '%Y-%m-%d')
             
             # Create the animal
-            animal = Animal(animal_id, sex, genotype, dob)
+            animal = Animal(animal_id, sex, genotype, dob, None, None, notes, cage_id, date_weaned)
             
             # Set parent relationships if provided
             if mother_id:
@@ -232,7 +257,10 @@ def get_colony_data():
             'genotype': animal.genotype,
             'dob': animal.dob.isoformat(),
             'mother_id': animal.mother.animal_id if animal.mother else None,
-            'father_id': animal.father.animal_id if animal.father else None
+            'father_id': animal.father.animal_id if animal.father else None,
+            'notes': getattr(animal, 'notes', None),
+            'cage_id': getattr(animal, 'cage_id', None),
+            'date_weaned': animal.date_weaned.isoformat() if hasattr(animal, 'date_weaned') and animal.date_weaned else None
         }
         data['animals'].append(animal_data)
     
@@ -282,52 +310,136 @@ def delete_animal(animal_id):
 
 @app.route('/edit_animal/<animal_id>', methods=['POST'])
 def edit_animal(animal_id):
-    """Edit an animal in the current colony"""
+    global current_colony
     if not current_colony:
-        return redirect(url_for('list_colonies'))
-
+        return jsonify({'success': False, 'error': 'No colony selected'}), 400
+    
     try:
-        # Find the animal
-        animal = current_colony.get_animal(animal_id)
+        # Check if the request is JSON or form data
+        if request.is_json:
+            data = request.get_json()
+        else:
+            # Process form data
+            data = {
+                'original_id': request.form.get('original_id', animal_id),
+                'animal_id': request.form.get('animal_id'),
+                'sex': request.form.get('sex'),
+                'genotype': request.form.get('genotype'),
+                'dob': request.form.get('dob'),
+                'date_weaned': request.form.get('date_weaned'),
+                'cage_id': request.form.get('cage_id'),
+                'mother_id': request.form.get('mother_id'),
+                'father_id': request.form.get('father_id'),
+                'notes': request.form.get('notes')
+            }
+        
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+        print(f"Received data: {data}")  # Debug print
+            
+        original_id = data.get('original_id', animal_id)  # Use the path parameter as fallback
+        
+        # Get the animal using the original ID
+        animal = current_colony.get_animal_by_id(original_id)
         if not animal:
-            print(f"Animal {animal_id} not found in colony {current_colony.name}")
-            return redirect(url_for('view_colony'))
-
+            return jsonify({'success': False, 'error': f'Animal with ID {original_id} not found'}), 404
+            
+        new_id = data.get('animal_id')
+        sex = data.get('sex')
+        genotype = data.get('genotype')
+        dob = data.get('dob')
+        cage_id = data.get('cage_id')
+        mother_id = data.get('mother_id')
+        father_id = data.get('father_id')
+        notes = data.get('notes')
+        date_weaned = data.get('date_weaned')
+        
+        print(f"Updating animal {original_id} -> {new_id}, sex={sex}, genotype={genotype}")
+        
         # Update animal properties
-        animal.sex = request.form['sex']
-        animal.genotype = request.form['genotype']
-        animal.dob = datetime.strptime(request.form['dob'], '%Y-%m-%d').date()
+        if animal.animal_id != new_id:
+            print(f"Changing animal ID from {animal.animal_id} to {new_id}")
+            # ID is changing, update all references
+            current_colony.update_animal_id(animal.animal_id, new_id)
         
-        # Update parent relationships
-        # First remove existing relationships
-        if animal.mother:
-            animal.mother.children.remove(animal)
-        if animal.father:
-            animal.father.children.remove(animal)
-
-        # Set new relationships
-        mother_id = request.form.get('mother_id')
-        father_id = request.form.get('father_id')
+        animal.sex = sex
+        animal.genotype = genotype
+        animal.dob = dob if isinstance(dob, date) else date.fromisoformat(dob)
+        animal.cage_id = cage_id
+        animal.notes = notes
         
-        if mother_id:
-            mother = current_colony.get_animal(mother_id)
-            if mother:
-                animal.mother = mother
-                mother.children.append(animal)
+        # Update date_weaned if provided
+        if date_weaned:
+            animal.date_weaned = date_weaned if isinstance(date_weaned, date) else date.fromisoformat(date_weaned)
+        else:
+            animal.date_weaned = None
         
-        if father_id:
-            father = current_colony.get_animal(father_id)
-            if father:
-                animal.father = father
-                father.children.append(animal)
-
-        # Save the colony after editing
+        # Handle mother relationship
+        current_mother_id = animal.mother.animal_id if hasattr(animal.mother, 'animal_id') else animal.mother
+        if mother_id != str(current_mother_id):
+            print(f"Changing mother from {current_mother_id} to {mother_id}")
+            # Remove from old mother's children if exists
+            if animal.mother:
+                old_mother = current_colony.get_animal_by_id(current_mother_id)
+                if old_mother:
+                    if hasattr(old_mother.children, 'remove'):
+                        if animal.animal_id in old_mother.children:
+                            old_mother.children.remove(animal.animal_id)
+            
+            # Set new mother
+            if mother_id and mother_id != "None":
+                new_mother = current_colony.get_animal_by_id(mother_id)
+                if new_mother:
+                    animal.mother = new_mother
+                    if animal.animal_id not in new_mother.children:
+                        new_mother.children.append(animal.animal_id)
+                else:
+                    animal.mother = None
+            else:
+                animal.mother = None
+        
+        # Handle father relationship
+        current_father_id = animal.father.animal_id if hasattr(animal.father, 'animal_id') else animal.father
+        if father_id != str(current_father_id):
+            print(f"Changing father from {current_father_id} to {father_id}")
+            # Remove from old father's children if exists
+            if animal.father:
+                old_father = current_colony.get_animal_by_id(current_father_id)
+                if old_father:
+                    if hasattr(old_father.children, 'remove'):
+                        if animal.animal_id in old_father.children:
+                            old_father.children.remove(animal.animal_id)
+            
+            # Set new father
+            if father_id and father_id != "None":
+                new_father = current_colony.get_animal_by_id(father_id)
+                if new_father:
+                    animal.father = new_father
+                    if animal.animal_id not in new_father.children:
+                        new_father.children.append(animal.animal_id)
+                else:
+                    animal.father = None
+            else:
+                animal.father = None
+        
+        # Save the colony
         save_colony(current_colony, current_colony.name)
-        print(f"Updated animal {animal_id} in colony {current_colony.name}")
+        
+        # If it was a JSON request, return JSON response
+        if request.is_json:
+            return jsonify({'success': True})
+        # Otherwise redirect back to colony view
+        else:
+            return redirect(url_for('view_colony'))
+    
     except Exception as e:
-        print(f"Error editing animal: {str(e)}")
-
-    return redirect(url_for('view_colony'))
+        print(f"Error in edit_animal: {str(e)}")
+        if request.is_json:
+            return jsonify({'success': False, 'error': str(e)}), 400
+        else:
+            flash(f"Error updating animal: {str(e)}", 'error')
+            return redirect(url_for('view_colony'))
 
 @app.route('/colony/rename/<old_name>', methods=['POST'])
 def rename_colony_file(old_name):

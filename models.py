@@ -1,10 +1,12 @@
 from datetime import date
 from typing import Optional, List
+import json
 
 class Animal:
     def __init__(self, animal_id: str, sex: str, genotype: str, dob: date,
                  mother: Optional["Animal"] = None, father: Optional["Animal"] = None,
-                 notes: Optional[str] = None):
+                 notes: Optional[str] = None, cage_id: Optional[str] = None,
+                 date_weaned: Optional[date] = None):
         self.animal_id = animal_id
         self.sex = sex
         self.genotype = genotype
@@ -13,6 +15,8 @@ class Animal:
         self.father = father
         self.children: List["Animal"] = []
         self.notes = notes
+        self.cage_id = cage_id
+        self.date_weaned = date_weaned
 
         # Automatically link to parents' children lists
         if mother:
@@ -32,18 +36,29 @@ class Animal:
             'dob': self.dob.isoformat(),
             'mother_id': self.mother.animal_id if self.mother else None,
             'father_id': self.father.animal_id if self.father else None,
-            'notes': self.notes
+            'notes': self.notes,
+            'cage_id': self.cage_id,
+            'date_weaned': self.date_weaned.isoformat() if self.date_weaned else None
         }
     
     @classmethod
     def from_dict(cls, data: dict):
         """Create animal from dictionary"""
+        date_weaned = None
+        if data.get('date_weaned'):
+            try:
+                date_weaned = date.fromisoformat(data['date_weaned'])
+            except (ValueError, TypeError):
+                date_weaned = None
+                
         return cls(
             animal_id=data['animal_id'],
             sex=data['sex'],
             genotype=data['genotype'],
             dob=date.fromisoformat(data['dob']),
-            notes=data['notes']
+            notes=data.get('notes'),
+            cage_id=data.get('cage_id'),
+            date_weaned=date_weaned
         )
 
 class Colony:
@@ -60,6 +75,46 @@ class Colony:
     def get_animal(self, animal_id):
         """Get an animal by its ID"""
         return next((a for a in self.animals if a.animal_id == animal_id), None)
+    
+    def get_animal_by_id(self, animal_id):
+        """Get an animal by its ID"""
+        return next((a for a in self.animals if a.animal_id == animal_id), None)
+    
+    def update_animal_id(self, old_id, new_id):
+        """Update an animal's ID and all references to it"""
+        animal = self.get_animal_by_id(old_id)
+        if not animal:
+            return False
+            
+        # Update the animal's ID
+        animal.animal_id = new_id
+        
+        # Update references in other animals
+        for a in self.animals:
+            # Update mother references
+            if a.mother and isinstance(a.mother, str) and a.mother == old_id:
+                a.mother = new_id
+            elif a.mother and hasattr(a.mother, 'animal_id') and a.mother.animal_id == old_id:
+                # Mother is an Animal object
+                a.mother.animal_id = new_id
+                
+            # Update father references
+            if a.father and isinstance(a.father, str) and a.father == old_id:
+                a.father = new_id
+            elif a.father and hasattr(a.father, 'animal_id') and a.father.animal_id == old_id:
+                # Father is an Animal object
+                a.father.animal_id = new_id
+                
+            # Update children references
+            if isinstance(a.children, list):
+                # Children could be a list of strings (IDs) or Animal objects
+                for i, child in enumerate(a.children):
+                    if isinstance(child, str) and child == old_id:
+                        a.children[i] = new_id
+                    elif hasattr(child, 'animal_id') and child.animal_id == old_id:
+                        child.animal_id = new_id
+                
+        return True
     
     def get_founders(self):
         """Get all animals without parents"""
@@ -86,6 +141,34 @@ class Colony:
                 for uncle in self.get_siblings(parent):
                     cousins.extend(uncle.children)
         return list(set(cousins))  # Remove duplicates
+    
+    def get_unique_cage_ids(self):
+        """Get all unique cage IDs in the colony"""
+        return sorted(list(set(a.cage_id for a in self.animals if a.cage_id)))
+    
+    def get_males(self):
+        """Get all male animals in the colony"""
+        return [a for a in self.animals if a.sex == "Male"]
+
+    def get_females(self):
+        """Get all female animals in the colony"""
+        return [a for a in self.animals if a.sex == "Female"]
+
+    def get_animal_with_cage(self, animal_id):
+        """Get an animal by its ID, including cage information"""
+        animal = self.get_animal(animal_id)
+        if animal:
+            return {
+                'animal_id': animal.animal_id,
+                'sex': animal.sex,
+                'genotype': animal.genotype,
+                'dob': animal.dob.isoformat(),
+                'mother_id': animal.mother.animal_id if animal.mother else None,
+                'father_id': animal.father.animal_id if animal.father else None,
+                'notes': animal.notes,
+                'cage_id': animal.cage_id
+            }
+        return None
     
     def to_dict(self):
         """Convert colony to dictionary for JSON serialization"""
@@ -118,4 +201,14 @@ class Colony:
                 animal.father = father
                 father.children.append(animal)
         
-        return colony 
+        return colony
+
+    def to_json(self):
+        """Convert colony to JSON string for serialization"""
+        return json.dumps(self.to_dict())
+    
+    @classmethod
+    def load_from_json(cls, json_str):
+        """Create colony from JSON string"""
+        data = json.loads(json_str)
+        return cls.from_dict(data) 
