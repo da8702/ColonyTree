@@ -139,11 +139,24 @@ def load_colony(filename):
     for animal_data in data['animals']:
         animal = next(a for a in colony.animals if a.animal_id == animal_data['animal_id'])
         if animal_data['mother_id']:
-            mother = next(a for a in colony.animals if a.animal_id == animal_data['mother_id'])
-            animal.mother = mother
+            try:
+                mother = next((a for a in colony.animals if a.animal_id == animal_data['mother_id']), None)
+                if mother:
+                    animal.mother = mother
+                else:
+                    print(f"Warning: Mother animal with ID {animal_data['mother_id']} not found for animal {animal.animal_id}")
+            except Exception as e:
+                print(f"Error setting mother for animal {animal.animal_id}: {str(e)}")
+        
         if animal_data['father_id']:
-            father = next(a for a in colony.animals if a.animal_id == animal_data['father_id'])
-            animal.father = father
+            try:
+                father = next((a for a in colony.animals if a.animal_id == animal_data['father_id']), None)
+                if father:
+                    animal.father = father
+                else:
+                    print(f"Warning: Father animal with ID {animal_data['father_id']} not found for animal {animal.animal_id}")
+            except Exception as e:
+                print(f"Error setting father for animal {animal.animal_id}: {str(e)}")
     
     return colony
 
@@ -328,23 +341,36 @@ def add_animal():
     return render_template('add_animal.html', colony=current_colony)
 
 @app.route('/visualization')
-def visualization():
+@app.route('/visualization/<vis_type>')
+def visualization(vis_type=None):
     """Serve the visualization page"""
     if not current_colony:
         return redirect(url_for('list_colonies'))
-    return render_template('visualization.html', colony=current_colony)
+    
+    # Default to animal visualization if type not specified
+    if vis_type not in ['animals', 'cages']:
+        vis_type = 'animals'
+        
+    return render_template('visualization.html', colony=current_colony, vis_type=vis_type)
 
 @app.route('/api/colony')
-def get_colony_data():
+@app.route('/api/colony/<data_type>')
+def get_colony_data(data_type=None):
     """Get current colony data for visualization"""
     if not current_colony:
         return jsonify({'error': 'No colony loaded'}), 404
     
+    # Default to animal data if type not specified
+    if data_type not in ['animals', 'cages']:
+        data_type = 'animals'
+    
     data = {
         'name': current_colony.name,
+        'type': data_type,
         'animals': []
     }
     
+    # Always include basic animal data
     for animal in current_colony.animals:
         animal_data = {
             'animal_id': animal.animal_id,
@@ -358,6 +384,22 @@ def get_colony_data():
             'date_weaned': animal.date_weaned.isoformat() if hasattr(animal, 'date_weaned') and animal.date_weaned else None
         }
         data['animals'].append(animal_data)
+    
+    # For cage visualization, add cage data
+    if data_type == 'cages':
+        # Get unique cages
+        unique_cages = {}
+        for animal in current_colony.animals:
+            if animal.cage_id and animal.cage_id not in unique_cages:
+                unique_cages[animal.cage_id] = {
+                    'cage_id': animal.cage_id,
+                    'animals': []
+                }
+            
+            if animal.cage_id:
+                unique_cages[animal.cage_id]['animals'].append(animal.animal_id)
+        
+        data['cages'] = list(unique_cages.values())
     
     return jsonify(data)
 
@@ -394,9 +436,26 @@ def delete_animal(animal_id):
         if animal:
             # Remove parent-child relationships
             if animal.mother:
-                animal.mother.children.remove(animal)
+                try:
+                    animal.mother.children.remove(animal)
+                except (ValueError, AttributeError) as e:
+                    print(f"Warning: Could not remove animal from mother's children: {e}")
+            
             if animal.father:
-                animal.father.children.remove(animal)
+                try:
+                    animal.father.children.remove(animal)
+                except (ValueError, AttributeError) as e:
+                    print(f"Warning: Could not remove animal from father's children: {e}")
+            
+            # Remove references to this animal as a parent from other animals
+            for other_animal in current_colony.animals:
+                if other_animal.mother and other_animal.mother.animal_id == animal_id:
+                    print(f"Removing parent reference: {other_animal.animal_id}'s mother was {animal_id}")
+                    other_animal.mother = None
+                
+                if other_animal.father and other_animal.father.animal_id == animal_id:
+                    print(f"Removing parent reference: {other_animal.animal_id}'s father was {animal_id}")
+                    other_animal.father = None
             
             # Remove the animal from the colony
             current_colony.animals.remove(animal)
@@ -408,8 +467,9 @@ def delete_animal(animal_id):
             print(f"Animal {animal_id} not found in colony {current_colony.name}")
     except Exception as e:
         print(f"Error deleting animal: {str(e)}")
+        traceback.print_exc()
     
-    return redirect(url_for('view_colony'))
+    return redirect(url_for('view_animals'))
 
 @app.route('/edit_animal/<animal_id>', methods=['POST'])
 def edit_animal(animal_id):

@@ -17,7 +17,7 @@
                     <a href="{{ url_for('view_cages') }}" class="btn btn-secondary">Cages</a>
                     <a href="{{ url_for('add_animal') }}" class="btn btn-primary">Add Animal</a>
                     <a href="{{ url_for('add_cage') }}" class="btn btn-primary">Add Cage</a>
-                    <a href="{{ url_for('visualization') }}" class="btn btn-info">View Tree</a>
+                    <a href="{{ url_for('visualization', vis_type='animals') }}" class="btn btn-info">View Tree</a>
                 </div>
             </div>
         </div>
@@ -70,10 +70,10 @@
                             <td>{{ animal.father.animal_id if animal.father else '-' }}</td>
                             <td>
                                 <button type="button" 
-                                        class="btn btn-link text-danger p-0 text-decoration-none" 
+                                        class="btn btn-sm btn-danger" 
                                         data-bs-toggle="modal" 
                                         data-bs-target="#deleteAnimalModal{{ animal.animal_id }}">
-                                    ×
+                                    Delete
                                 </button>
                             </td>
                         </tr>

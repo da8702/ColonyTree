@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         cy.add({
                             data: {
                                 id: `cage_${cage.cage_id}`,
-                                label: `Cage ${cage.cage_id}\n(${cage.animals.length} animals)`,
+                                label: `${cage.cage_id}\n${predominantGenotype}\n${cage.animals.length}`,
                                 node_type: 'cage',
                                 sex: cageSex,
                                 genotype: predominantGenotype,
