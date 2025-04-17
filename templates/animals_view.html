@@ -256,7 +256,7 @@ function calculateAge(dobString) {
     }
 }
 
-$(document).ready(function() {
+document.addEventListener('DOMContentLoaded', function() {
     // Calculate and display age for all animals
     document.querySelectorAll('.animal-age').forEach(element => {
         const dob = element.getAttribute('data-dob');
@@ -266,34 +266,36 @@ $(document).ready(function() {
     });
     
     // Handle clicking on animal ID to edit
-    $('.animal-id-link').click(function(e) {
-        e.preventDefault();
-        
-        // Get the animal data from data attributes
-        const animalId = $(this).data('animal-id');
-        const sex = $(this).data('sex');
-        const genotype = $(this).data('genotype');
-        const dob = $(this).data('dob');
-        const dateWeaned = $(this).data('date-weaned') || "";
-        const motherId = $(this).data('mother-id') || "";
-        const fatherId = $(this).data('father-id') || "";
-        const cageId = $(this).data('cage-id') || "";
-        const notes = $(this).data('notes') || "";
-        
-        // Populate the form fields
-        $('#originalAnimalId' + animalId).val(animalId);
-        $('#editAnimalId' + animalId).val(animalId);
-        $('#editSex' + animalId).val(sex);
-        $('#editGenotype' + animalId).val(genotype);
-        $('#editDob' + animalId).val(dob);
-        $('#editDateWeaned' + animalId).val(dateWeaned);
-        $('#editMother' + animalId).val(motherId);
-        $('#editFather' + animalId).val(fatherId);
-        $('#editCageId' + animalId).val(cageId);
-        $('#editNotes' + animalId).val(notes);
-        
-        // Open the modal
-        $('#editAnimalModal' + animalId).modal('show');
+    document.querySelectorAll('.animal-id-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Get the animal data from data attributes
+            const animalId = this.getAttribute('data-animal-id');
+            const sex = this.getAttribute('data-sex');
+            const genotype = this.getAttribute('data-genotype');
+            const dob = this.getAttribute('data-dob');
+            const dateWeaned = this.getAttribute('data-date-weaned') || "";
+            const motherId = this.getAttribute('data-mother-id') || "";
+            const fatherId = this.getAttribute('data-father-id') || "";
+            const cageId = this.getAttribute('data-cage-id') || "";
+            const notes = this.getAttribute('data-notes') || "";
+            
+            // Populate the form fields
+            document.getElementById('originalAnimalId' + animalId).value = animalId;
+            document.getElementById('editAnimalId' + animalId).value = animalId;
+            document.getElementById('editSex' + animalId).value = sex;
+            document.getElementById('editGenotype' + animalId).value = genotype;
+            document.getElementById('editDob' + animalId).value = dob;
+            document.getElementById('editDateWeaned' + animalId).value = dateWeaned;
+            document.getElementById('editMother' + animalId).value = motherId;
+            document.getElementById('editFather' + animalId).value = fatherId;
+            document.getElementById('editCageId' + animalId).value = cageId;
+            document.getElementById('editNotes' + animalId).value = notes;
+            
+            // Open the modal
+            new bootstrap.Modal(document.getElementById('editAnimalModal' + animalId)).show();
+        });
     });
     
     // Handle animal edit form submissions
@@ -307,55 +309,48 @@ $(document).ready(function() {
             
             // Create data object manually
             const data = {
-                animal_id: this.querySelector('[name="animal_id"]').value,
                 original_id: this.querySelector('[name="original_id"]').value,
+                animal_id: this.querySelector('[name="animal_id"]').value,
                 sex: this.querySelector('[name="sex"]').value,
                 genotype: this.querySelector('[name="genotype"]').value,
                 dob: this.querySelector('[name="dob"]').value,
-                date_weaned: this.querySelector('[name="date_weaned"]').value || null,
-                cage_id: this.querySelector('[name="cage_id"]').value || null,
-                mother_id: this.querySelector('[name="mother_id"]').value || null,
-                father_id: this.querySelector('[name="father_id"]').value || null,
-                notes: this.querySelector('[name="notes"]').value || null
+                date_weaned: this.querySelector('[name="date_weaned"]').value,
+                mother_id: this.querySelector('[name="mother_id"]').value,
+                father_id: this.querySelector('[name="father_id"]').value,
+                cage_id: this.querySelector('[name="cage_id"]').value,
+                notes: this.querySelector('[name="notes"]').value
             };
             
             console.log('Sending data:', data);
             
-            // Stringify the data for JSON submission
-            const jsonData = JSON.stringify(data);
-            console.log('JSON data being sent:', jsonData);
-            
-            fetch(`/edit_animal/${animalId}`, {
+            // Use fetch API to submit the form asynchronously
+            fetch('/edit_animal/' + animalId, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: jsonData
+                body: JSON.stringify(data)
             })
             .then(response => {
-                console.log('Response status:', response.status);
-                console.log('Response headers:', [...response.headers.entries()]);
-                
                 if (!response.ok) {
                     return response.text().then(text => {
-                        console.error('Error response:', text);
                         throw new Error(text || response.statusText);
                     });
                 }
                 return response.json();
             })
             .then(data => {
-                console.log('Response data:', data);
                 if (data.success) {
-                    alert('Successfully updated animal ' + animalId);
+                    console.log('Animal updated successfully');
                     window.location.reload();
                 } else {
-                    alert('Error: ' + (data.error || 'Failed to update animal'));
+                    console.error('Error updating animal:', data.error);
+                    alert('Error updating animal: ' + data.error);
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('Error updating animal:', error);
                 alert('Error updating animal: ' + error.message);
             });
         });

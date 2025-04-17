@@ -48,7 +48,7 @@
                             <th>Sex</th>
                             <th>Genotype</th>
                             <th>Date of Birth</th>
-                            <th>Avg Age</th>
+                            <th>Age</th>
                             <th>Date Weaned</th>
                             <th></th>
                         </tr>
@@ -367,7 +367,7 @@ function formatAverageAge(avgDays) {
     }
 }
 
-$(document).ready(function() {
+document.addEventListener('DOMContentLoaded', function() {
     // Calculate and display age for all cages
     document.querySelectorAll('.cage-age').forEach(element => {
         const dobListStr = element.getAttribute('data-dob-list');
