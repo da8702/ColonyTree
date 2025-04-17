@@ -1,24 +1,52 @@
 from flask import Flask, render_template, send_file, Response, request, jsonify, redirect, url_for, session, flash
+from flask.sessions import SecureCookieSessionInterface, SecureCookieSession
 import os
 import json
-from threading import Thread
+import csv
 import sys
-import webbrowser
+import glob
 import time
-from datetime import datetime, date
+import traceback
+from datetime import date, datetime, timedelta
+from random import randint, choice, random, seed
+from threading import Thread
+import webbrowser
 import requests
 import subprocess
+import pickle
+import base64
 from models import Animal, Colony
-import traceback
 import logging
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# Create a custom session interface to handle colony objects
+class CustomSessionInterface(SecureCookieSessionInterface):
+    def open_session(self, app, request):
+        s = SecureCookieSession()
+        return s
+
+    def save_session(self, app, session, response):
+        # We'll handle colony objects specially
+        # Only store IDs or other simple data in session, not the full colony object
+        # This helps avoid pickle serialization issues
+        if 'colony' in session:
+            colony = session['colony']
+            if isinstance(colony, Colony):
+                # Store minimal colony info
+                session['colony_name'] = colony.name
+                session['has_colony'] = True
+                # Remove the actual colony object from session
+                del session['colony']
+        return super().save_session(app, session, response)
+
 # Create Flask app
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'  # Required for flash messages
+# Use our custom session interface
+app.session_interface = CustomSessionInterface()
 
 # Global variable to store current colony
 current_colony = None
@@ -119,6 +147,12 @@ def load_colony(filename):
     
     return colony
 
+@app.before_request
+def before_request():
+    """Log debugging info before each request"""
+    # Debug logging removed for production
+    pass
+
 @app.route('/')
 def index():
     """Redirect to colonies page"""
@@ -142,10 +176,16 @@ def list_colonies():
 @app.route('/colony/new', methods=['GET', 'POST'])
 def new_colony():
     """Create a new colony"""
+    global current_colony
     if request.method == 'POST':
         name = request.form['name']
-        global current_colony
         current_colony = Colony(name)
+        
+        # Store colony name in session
+        session['colony_name'] = name
+        session['has_colony'] = True
+        print(f"Created new colony '{name}' and stored name in session")
+        
         return redirect(url_for('view_colony'))
     return render_template('new_colony.html')
 
@@ -153,12 +193,33 @@ def new_colony():
 def load_colony_route(name):
     """Load a specific colony"""
     global current_colony
+    print(f"Attempting to load colony: {name}")
+    
     try:
+        print(f"Looking for colony file: colonies/{name}.json")
+        if not os.path.exists(f'colonies/{name}.json'):
+            print(f"Colony file not found: colonies/{name}.json")
+            return f"Error: Colony file colonies/{name}.json not found", 404
+            
         current_colony = load_colony(name)
         # Ensure the colony name matches the file name
         current_colony.name = name
+        
+        # For session, just store the colony name
+        session['colony_name'] = name
+        session['has_colony'] = True
+        print(f"Successfully loaded colony '{name}' with {len(current_colony.animals)} animals")
+        print(f"Stored colony name '{name}' in session")
+        
+        # Extra debugging - what routes we have available
+        print(f"Available routes:")
+        for rule in app.url_map.iter_rules():
+            print(f"  {rule}")
+        
         return redirect(url_for('view_colony'))
     except Exception as e:
+        print(f"Error loading colony: {str(e)}")
+        traceback.print_exc()
         return f"Error loading colony: {str(e)}", 400
 
 @app.route('/colony/save', methods=['POST'])
@@ -187,9 +248,29 @@ def view_animals():
 @app.route('/colony/cages')
 def view_cages():
     """View the cages in the current colony"""
+    global current_colony
+    
     if not current_colony:
+        print("No colony loaded, redirecting to colony list")
         return redirect(url_for('list_colonies'))
-    return render_template('cages_view.html', colony=current_colony)
+    
+    has_colony_in_session = session.get('has_colony', False)
+    colony_name_in_session = session.get('colony_name', 'None')
+    print(f"Rendering cages view with colony: {current_colony.name}")
+    print(f"Colony in session: {has_colony_in_session}, name: {colony_name_in_session}")
+    
+    # Pass extra debug info to the template
+    template_data = {
+        'colony': current_colony,
+        'has_colony_in_session': has_colony_in_session,
+        'debug_info': {
+            'current_colony_name': current_colony.name,
+            'colony_name_in_session': colony_name_in_session,
+            'names_match': current_colony.name == colony_name_in_session if has_colony_in_session else False
+        }
+    }
+    
+    return render_template('cages_view.html', **template_data)
 
 @app.route('/add_animal', methods=['GET', 'POST'])
 def add_animal():
@@ -283,6 +364,7 @@ def get_colony_data():
 @app.route('/colony/rename', methods=['POST'])
 def rename_colony():
     """Rename the current colony"""
+    global current_colony
     if not current_colony:
         return redirect(url_for('list_colonies'))
     
@@ -290,7 +372,14 @@ def rename_colony():
     if not new_name:
         return "Error: New name is required", 400
     
+    print(f"Renaming colony from '{current_colony.name}' to '{new_name}'")
     current_colony.name = new_name
+    
+    # Update the colony name in session
+    session['colony_name'] = new_name
+    session['has_colony'] = True
+    print(f"Updated colony name in session to '{new_name}'")
+    
     return redirect(url_for('view_colony'))
 
 @app.route('/delete_animal/<animal_id>', methods=['POST'])
@@ -324,136 +413,166 @@ def delete_animal(animal_id):
 
 @app.route('/edit_animal/<animal_id>', methods=['POST'])
 def edit_animal(animal_id):
+    """Edit an existing animal's properties"""
     global current_colony
+    
+    print(f"Edit animal request received for animal ID: {animal_id}")
+    print(f"Request content type: {request.content_type}")
+    print(f"Request data: {request.data}")
+    
     if not current_colony:
+        print("Error: No colony loaded (current_colony is None)")
         return jsonify({'success': False, 'error': 'No colony selected'}), 400
     
     try:
         # Check if the request is JSON or form data
         if request.is_json:
             data = request.get_json()
+            print(f"Parsed JSON data: {data}")
         else:
-            # Process form data
-            data = {
-                'original_id': request.form.get('original_id', animal_id),
-                'animal_id': request.form.get('animal_id'),
-                'sex': request.form.get('sex'),
-                'genotype': request.form.get('genotype'),
-                'dob': request.form.get('dob'),
-                'date_weaned': request.form.get('date_weaned'),
-                'cage_id': request.form.get('cage_id'),
-                'mother_id': request.form.get('mother_id'),
-                'father_id': request.form.get('father_id'),
-                'notes': request.form.get('notes')
-            }
+            print("Request is not JSON format")
+            try:
+                # Try to parse the request data as JSON manually
+                data = json.loads(request.data)
+                print(f"Manually parsed JSON data: {data}")
+            except Exception as e:
+                print(f"Failed to parse request data: {e}")
+                # Process form data
+                data = {
+                    'original_id': request.form.get('original_id', animal_id),
+                    'animal_id': request.form.get('animal_id'),
+                    'sex': request.form.get('sex'),
+                    'genotype': request.form.get('genotype'),
+                    'dob': request.form.get('dob'),
+                    'date_weaned': request.form.get('date_weaned'),
+                    'cage_id': request.form.get('cage_id'),
+                    'mother_id': request.form.get('mother_id'),
+                    'father_id': request.form.get('father_id'),
+                    'notes': request.form.get('notes')
+                }
+                print(f"Form data: {data}")
         
         if not data:
+            print("No data provided in request")
             return jsonify({'success': False, 'error': 'No data provided'}), 400
             
-        print(f"Received data: {data}")  # Debug print
+        print(f"Processing edit for animal: {animal_id}")
             
         original_id = data.get('original_id', animal_id)  # Use the path parameter as fallback
         
         # Get the animal using the original ID
         animal = current_colony.get_animal_by_id(original_id)
         if not animal:
+            print(f"Animal with ID {original_id} not found")
             return jsonify({'success': False, 'error': f'Animal with ID {original_id} not found'}), 404
             
+        # Get the new values from the request
         new_id = data.get('animal_id')
         sex = data.get('sex')
         genotype = data.get('genotype')
-        dob = data.get('dob')
+        dob_str = data.get('dob')
+        date_weaned_str = data.get('date_weaned')
         cage_id = data.get('cage_id')
         mother_id = data.get('mother_id')
         father_id = data.get('father_id')
-        notes = data.get('notes')
-        date_weaned = data.get('date_weaned')
+        notes = data.get('notes', '')
         
-        print(f"Updating animal {original_id} -> {new_id}, sex={sex}, genotype={genotype}")
+        print(f"New values: id={new_id}, sex={sex}, genotype={genotype}, dob={dob_str}, date_weaned={date_weaned_str}, cage={cage_id}, mother={mother_id}, father={father_id}")
         
-        # Update animal properties
-        if animal.animal_id != new_id:
-            print(f"Changing animal ID from {animal.animal_id} to {new_id}")
-            # ID is changing, update all references
-            current_colony.update_animal_id(animal.animal_id, new_id)
+        # Parse dates
+        dob = None
+        if dob_str:
+            try:
+                dob = date.fromisoformat(dob_str)
+            except ValueError:
+                print(f"Invalid date of birth format: {dob_str}")
+                return jsonify({'success': False, 'error': f'Invalid date of birth format: {dob_str}'}), 400
+                
+        date_weaned = None
+        if date_weaned_str:
+            try:
+                date_weaned = date.fromisoformat(date_weaned_str)
+            except ValueError:
+                print(f"Invalid date weaned format: {date_weaned_str}")
+                return jsonify({'success': False, 'error': f'Invalid date weaned format: {date_weaned_str}'}), 400
         
-        animal.sex = sex
-        animal.genotype = genotype
-        animal.dob = dob if isinstance(dob, date) else date.fromisoformat(dob)
-        animal.cage_id = cage_id
-        animal.notes = notes
-        
-        # Update date_weaned if provided
-        if date_weaned:
-            animal.date_weaned = date_weaned if isinstance(date_weaned, date) else date.fromisoformat(date_weaned)
-        else:
-            animal.date_weaned = None
-        
-        # Handle mother relationship
-        current_mother_id = animal.mother.animal_id if hasattr(animal.mother, 'animal_id') else animal.mother
-        if mother_id != str(current_mother_id):
-            print(f"Changing mother from {current_mother_id} to {mother_id}")
-            # Remove from old mother's children if exists
-            if animal.mother:
-                old_mother = current_colony.get_animal_by_id(current_mother_id)
-                if old_mother:
-                    if hasattr(old_mother.children, 'remove'):
-                        if animal.animal_id in old_mother.children:
-                            old_mother.children.remove(animal.animal_id)
+        # Update the animal ID if it changed
+        if new_id and new_id != original_id:
+            print(f"Changing animal ID from {original_id} to {new_id}")
+            # Check if the new ID already exists
+            if current_colony.get_animal_by_id(new_id):
+                print(f"Animal with ID {new_id} already exists")
+                return jsonify({'success': False, 'error': f'Animal with ID {new_id} already exists'}), 400
+            animal.animal_id = new_id
             
-            # Set new mother
-            if mother_id and mother_id != "None":
-                new_mother = current_colony.get_animal_by_id(mother_id)
-                if new_mother:
-                    animal.mother = new_mother
-                    if animal.animal_id not in new_mother.children:
-                        new_mother.children.append(animal.animal_id)
+        # Update other properties
+        if sex:
+            animal.sex = sex
+        if genotype:
+            animal.genotype = genotype
+        if dob:
+            animal.dob = dob
+        if date_weaned:
+            animal.date_weaned = date_weaned
+        if cage_id is not None:  # Allow empty cage_id to clear existing cage
+            animal.cage_id = cage_id
+        if notes is not None:  # Allow empty notes to clear existing notes
+            animal.notes = notes
+            
+        # Update mother if changed
+        old_mother_id = animal.mother.animal_id if animal.mother else None
+        if mother_id != old_mother_id:
+            print(f"Changing mother from {old_mother_id} to {mother_id}")
+            # If there was a previous mother, remove this animal from her children
+            if animal.mother:
+                animal.mother.children.remove(animal)
+            
+            # Set the new mother
+            if mother_id:
+                mother = current_colony.get_animal_by_id(mother_id)
+                if mother:
+                    animal.mother = mother
+                    if animal not in mother.children:
+                        mother.children.append(animal)
                 else:
-                    animal.mother = None
+                    print(f"Mother with ID {mother_id} not found")
             else:
                 animal.mother = None
-        
-        # Handle father relationship
-        current_father_id = animal.father.animal_id if hasattr(animal.father, 'animal_id') else animal.father
-        if father_id != str(current_father_id):
-            print(f"Changing father from {current_father_id} to {father_id}")
-            # Remove from old father's children if exists
+                
+        # Update father if changed
+        old_father_id = animal.father.animal_id if animal.father else None
+        if father_id != old_father_id:
+            print(f"Changing father from {old_father_id} to {father_id}")
+            # If there was a previous father, remove this animal from his children
             if animal.father:
-                old_father = current_colony.get_animal_by_id(current_father_id)
-                if old_father:
-                    if hasattr(old_father.children, 'remove'):
-                        if animal.animal_id in old_father.children:
-                            old_father.children.remove(animal.animal_id)
+                animal.father.children.remove(animal)
             
-            # Set new father
-            if father_id and father_id != "None":
-                new_father = current_colony.get_animal_by_id(father_id)
-                if new_father:
-                    animal.father = new_father
-                    if animal.animal_id not in new_father.children:
-                        new_father.children.append(animal.animal_id)
+            # Set the new father
+            if father_id:
+                father = current_colony.get_animal_by_id(father_id)
+                if father:
+                    animal.father = father
+                    if animal not in father.children:
+                        father.children.append(animal)
                 else:
-                    animal.father = None
+                    print(f"Father with ID {father_id} not found")
             else:
                 animal.father = None
         
         # Save the colony
+        print(f"Saving colony after updating animal {animal.animal_id}")
         save_colony(current_colony, current_colony.name)
         
-        # If it was a JSON request, return JSON response
-        if request.is_json:
-            return jsonify({'success': True})
-        # Otherwise redirect back to animals view
-        else:
-            return redirect(url_for('view_animals'))
-    
+        print(f"Successfully updated animal {animal.animal_id}")
+        return jsonify({
+            'success': True,
+            'message': f'Successfully updated animal {animal.animal_id}'
+        })
+        
     except Exception as e:
         print(f"Error in edit_animal: {str(e)}")
-        if request.is_json:
-            return jsonify({'success': False, 'error': str(e)}), 400
-        else:
-            flash(f"Error updating animal: {str(e)}", 'error')
-            return redirect(url_for('view_animals'))
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/colony/rename/<old_name>', methods=['POST'])
 def rename_colony_file(old_name):
@@ -715,6 +834,122 @@ def delete_cage():
         traceback.print_exc()
     
     return redirect(url_for('view_cages'))
+
+@app.route('/edit_cage', methods=['POST'])
+def edit_cage():
+    """Update all animals in a cage with the specified properties"""
+    global current_colony
+    
+    if not current_colony:
+        # Try to recover the colony from session if possible
+        colony_name = session.get('colony_name')
+        if colony_name and os.path.exists(f'colonies/{colony_name}.json'):
+            try:
+                current_colony = load_colony(colony_name)
+            except Exception as e:
+                return jsonify({'success': False, 'error': 'Failed to load colony. Please reload your colony.'}), 400
+        else:
+            return jsonify({'success': False, 'error': 'No colony selected or colony not found. Please select a colony.'}), 400
+    
+    try:
+        # Get data from request
+        data = None
+        
+        if request.is_json:
+            data = request.get_json()
+        else:
+            try:
+                # Try to parse the request data as JSON manually
+                request_data = request.data.decode('utf-8') if hasattr(request.data, 'decode') else str(request.data)
+                data = json.loads(request_data)
+            except Exception:
+                # Fall back to form data
+                data = request.form.to_dict()
+                
+                # If still no data, try to parse the raw request
+                if not data and request_data:
+                    try:
+                        import urllib.parse
+                        parsed_data = urllib.parse.parse_qs(request_data)
+                        data = {k: v[0] for k, v in parsed_data.items()}
+                    except Exception:
+                        pass
+        
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided or could not parse request data'}), 400
+            
+        # Check if we should skip straight to redirect for non-AJAX requests
+        view_response = data.get('view_response', False)
+            
+        cage_id = data.get('cage_id')
+        if not cage_id:
+            return jsonify({'success': False, 'error': 'No cage ID provided'}), 400
+        
+        # Find all animals in the cage
+        animals_in_cage = [animal for animal in current_colony.animals if animal.cage_id == cage_id]
+        
+        if not animals_in_cage:
+            return jsonify({'success': False, 'error': f'No animals found in cage {cage_id}'}), 404
+        
+        # Get the properties to update
+        sex = data.get('sex')
+        genotype = data.get('genotype')
+        dob_str = data.get('dob')
+        date_weaned_str = data.get('date_weaned')
+        notes = data.get('notes', '')
+        
+        # Convert date strings to date objects
+        dob = None
+        if dob_str:
+            try:
+                dob = date.fromisoformat(dob_str)
+            except ValueError:
+                return jsonify({'success': False, 'error': f'Invalid date of birth format: {dob_str}'}), 400
+                
+        date_weaned = None
+        if date_weaned_str:
+            try:
+                date_weaned = date.fromisoformat(date_weaned_str)
+            except ValueError:
+                return jsonify({'success': False, 'error': f'Invalid date weaned format: {date_weaned_str}'}), 400
+        
+        # Update each animal in the cage
+        for animal in animals_in_cage:
+            if sex:
+                animal.sex = sex
+            if genotype:
+                animal.genotype = genotype
+            if dob:
+                animal.dob = dob
+            if date_weaned:
+                animal.date_weaned = date_weaned
+            if notes is not None:  # Allow empty notes to clear existing notes
+                animal.notes = notes
+        
+        # Save the colony
+        save_colony(current_colony, current_colony.name)
+        
+        # For normal form submission, redirect instead of returning JSON
+        if view_response and not request.is_json:
+            return redirect(url_for('view_cages'))
+        
+        # Otherwise return JSON response
+        return jsonify({
+            'success': True,
+            'message': f'Updated {len(animals_in_cage)} animals in cage {cage_id}',
+            'colony_name': current_colony.name,
+            'animals_updated': [animal.animal_id for animal in animals_in_cage],
+            'redirect_url': url_for('view_cages')
+        })
+    
+    except Exception as e:
+        # Log error but don't expose all details to client
+        print(f"Error in edit_cage: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False, 
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     print("Starting Animal Colony Manager...")
