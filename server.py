@@ -624,6 +624,12 @@ def edit_animal(animal_id):
         save_colony(current_colony, current_colony.name)
         
         print(f"Successfully updated animal {animal.animal_id}")
+        
+        # Check if the request is for form data (not JSON) and redirect to animals view
+        if request.content_type and 'application/json' not in request.content_type:
+            return redirect(url_for('view_animals'))
+            
+        # For API calls, return JSON response
         return jsonify({
             'success': True,
             'message': f'Successfully updated animal {animal.animal_id}'
