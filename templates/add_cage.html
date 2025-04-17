@@ -149,7 +149,7 @@ document.getElementById('addCageForm').addEventListener('submit', function(e) {
     })
     .then(data => {
         if (data.success) {
-            window.location.href = '/colony';
+            window.location.href = '/colony/cages';
         } else {
             alert('Error: ' + (data.error || 'Failed to add cage'));
         }

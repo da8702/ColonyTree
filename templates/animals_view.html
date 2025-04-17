@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ colony.name }} - Animal Colony Manager{% endblock %}
+{% block title %}{{ colony.name }} - Animals - Animal Colony Manager{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -11,6 +11,7 @@
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#renameColonyModal">
                     Rename Colony
                 </button>
+                <a href="{{ url_for('view_cages') }}" class="btn btn-secondary">Cages</a>
                 <a href="{{ url_for('add_animal') }}" class="btn btn-primary">Add Animal</a>
                 <a href="{{ url_for('add_cage') }}" class="btn btn-primary">Add Cage</a>
                 <a href="{{ url_for('visualization') }}" class="btn btn-info">View Tree</a>
@@ -260,10 +261,8 @@ $(document).ready(function() {
     document.querySelectorAll('.edit-animal-form').forEach(form => {
         form.addEventListener('submit', function(event) {
             event.preventDefault();
-            console.log('Form submission triggered');
             
             const animalId = this.querySelector('[name="original_id"]').value;
-            console.log('Original animal ID:', animalId);
             
             // Create data object manually
             const data = {

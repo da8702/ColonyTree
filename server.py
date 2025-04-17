@@ -172,10 +172,24 @@ def save_colony_route():
 
 @app.route('/colony')
 def view_colony():
-    """View the current colony"""
+    """View the current colony - redirects to Animals view"""
     if not current_colony:
         return redirect(url_for('list_colonies'))
-    return render_template('view_colony.html', colony=current_colony)
+    return redirect(url_for('view_animals'))
+
+@app.route('/colony/animals')
+def view_animals():
+    """View the animals in the current colony"""
+    if not current_colony:
+        return redirect(url_for('list_colonies'))
+    return render_template('animals_view.html', colony=current_colony)
+
+@app.route('/colony/cages')
+def view_cages():
+    """View the cages in the current colony"""
+    if not current_colony:
+        return redirect(url_for('list_colonies'))
+    return render_template('cages_view.html', colony=current_colony)
 
 @app.route('/add_animal', methods=['GET', 'POST'])
 def add_animal():
@@ -429,9 +443,9 @@ def edit_animal(animal_id):
         # If it was a JSON request, return JSON response
         if request.is_json:
             return jsonify({'success': True})
-        # Otherwise redirect back to colony view
+        # Otherwise redirect back to animals view
         else:
-            return redirect(url_for('view_colony'))
+            return redirect(url_for('view_animals'))
     
     except Exception as e:
         print(f"Error in edit_animal: {str(e)}")
@@ -439,7 +453,7 @@ def edit_animal(animal_id):
             return jsonify({'success': False, 'error': str(e)}), 400
         else:
             flash(f"Error updating animal: {str(e)}", 'error')
-            return redirect(url_for('view_colony'))
+            return redirect(url_for('view_animals'))
 
 @app.route('/colony/rename/<old_name>', methods=['POST'])
 def rename_colony_file(old_name):
@@ -651,6 +665,56 @@ def add_cage():
             })
     
     return render_template('add_cage.html', colony=current_colony)
+
+@app.route('/delete_cage', methods=['POST'])
+def delete_cage():
+    """Delete a cage and all animals in it from the current colony"""
+    if not current_colony:
+        return redirect(url_for('list_colonies'))
+    
+    cage_id = request.form.get('cage_id')
+    if not cage_id:
+        print("No cage_id provided")
+        return redirect(url_for('view_cages'))
+    
+    try:
+        print(f"Attempting to delete cage: {cage_id}")
+        # Find all animals in the cage
+        animals_to_delete = [animal for animal in current_colony.animals if animal.cage_id == cage_id]
+        
+        if not animals_to_delete:
+            print(f"No animals found in cage {cage_id}")
+            return redirect(url_for('view_cages'))
+        
+        # Remove each animal
+        for animal in animals_to_delete:
+            print(f"Removing animal: {animal.animal_id}")
+            # Remove parent-child relationships
+            if animal.mother:
+                try:
+                    if hasattr(animal.mother, 'children'):
+                        animal.mother.children.remove(animal)
+                except ValueError:
+                    print(f"Could not remove animal {animal.animal_id} from mother's children list")
+            if animal.father:
+                try:
+                    if hasattr(animal.father, 'children'):
+                        animal.father.children.remove(animal)
+                except ValueError:
+                    print(f"Could not remove animal {animal.animal_id} from father's children list")
+            
+            # Remove the animal from the colony
+            current_colony.animals.remove(animal)
+        
+        # Save the colony after deletion
+        save_colony(current_colony, current_colony.name)
+        print(f"Deleted cage {cage_id} with {len(animals_to_delete)} animals from colony {current_colony.name}")
+        
+    except Exception as e:
+        print(f"Error deleting cage: {str(e)}")
+        traceback.print_exc()
+    
+    return redirect(url_for('view_cages'))
 
 if __name__ == '__main__':
     print("Starting Animal Colony Manager...")

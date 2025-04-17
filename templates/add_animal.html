@@ -150,7 +150,7 @@ document.getElementById('addAnimalForm').addEventListener('submit', function(e) 
     })
     .then(data => {
         if (data.success) {
-            window.location.href = '/colony';
+            window.location.href = '/colony/animals';
         } else {
             alert('Error: ' + (data.error || 'Failed to add animal'));
         }
