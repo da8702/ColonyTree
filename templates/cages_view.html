@@ -48,6 +48,7 @@
                             <th>Sex</th>
                             <th>Genotype</th>
                             <th>Date of Birth</th>
+                            <th>Avg Age</th>
                             <th>Date Weaned</th>
                             <th></th>
                         </tr>
@@ -124,6 +125,10 @@
                                 {% else %}
                                     <span class="text-muted">Mixed</span>
                                 {% endif %}
+                            </td>
+                            
+                            <td class="cage-age" data-dob-list="{% for animal in animals %}{{ animal.dob.strftime('%Y-%m-%d') }}{% if not loop.last %},{% endif %}{% endfor %}">
+                                Loading...
                             </td>
                             
                             {% set all_same_weaned = true %}
@@ -302,7 +307,81 @@
 
 {% block scripts %}
 <script>
+// Age calculation function
+function calculateAge(dobString) {
+    // Parse the date of birth
+    const dob = new Date(dobString);
+    const today = new Date();
+    
+    // Calculate difference in milliseconds
+    const diffMs = today - dob;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    // Format based on age
+    if (diffDays < 14) {
+        // Less than 2 weeks - show in days
+        return diffDays + " days";
+    } else if (diffDays < 91) {
+        // Between 2 weeks and 3 months - show in weeks with 1 decimal
+        const weeks = (diffDays / 7).toFixed(1);
+        return weeks + " weeks";
+    } else {
+        // Over 3 months - show in months with 1 decimal
+        const months = (diffDays / 30.44).toFixed(1); // Average month length
+        return months + " months";
+    }
+}
+
+// Calculate average age in days
+function calculateAverageAgeDays(dobList) {
+    if (!dobList || dobList.length === 0) {
+        return 0;
+    }
+    
+    const today = new Date();
+    let totalDays = 0;
+    
+    dobList.forEach(dobString => {
+        const dob = new Date(dobString);
+        const diffMs = today - dob;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        totalDays += diffDays;
+    });
+    
+    return totalDays / dobList.length;
+}
+
+// Format average age based on the same rules
+function formatAverageAge(avgDays) {
+    if (avgDays < 14) {
+        // Less than 2 weeks - show in days
+        return Math.floor(avgDays) + " days";
+    } else if (avgDays < 91) {
+        // Between 2 weeks and 3 months - show in weeks with 1 decimal
+        const weeks = (avgDays / 7).toFixed(1);
+        return weeks + " weeks";
+    } else {
+        // Over 3 months - show in months with 1 decimal
+        const months = (avgDays / 30.44).toFixed(1); // Average month length
+        return months + " months";
+    }
+}
+
 $(document).ready(function() {
+    // Calculate and display age for all cages
+    document.querySelectorAll('.cage-age').forEach(element => {
+        const dobListStr = element.getAttribute('data-dob-list');
+        if(dobListStr) {
+            const dobList = dobListStr.split(',').filter(dob => dob.trim() !== '');
+            if(dobList.length > 0) {
+                const avgDays = calculateAverageAgeDays(dobList);
+                element.textContent = formatAverageAge(avgDays);
+            } else {
+                element.textContent = 'N/A';
+            }
+        }
+    });
+    
     // Handle cage edit form submissions using the submit buttons
     document.querySelectorAll('.edit-cage-submit-btn').forEach(button => {
         button.addEventListener('click', function(event) {

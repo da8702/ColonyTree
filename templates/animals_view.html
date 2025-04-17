@@ -34,6 +34,7 @@
                             <th>Sex</th>
                             <th>Genotype</th>
                             <th>Date of Birth</th>
+                            <th>Age</th>
                             <th>Date Weaned</th>
                             <th>Cage ID</th>
                             <th>Mother</th>
@@ -64,6 +65,7 @@
                             <td>{{ animal.sex }}</td>
                             <td>{{ animal.genotype }}</td>
                             <td>{{ animal.dob.strftime('%Y-%m-%d') }}</td>
+                            <td class="animal-age" data-dob="{{ animal.dob.strftime('%Y-%m-%d') }}">Loading...</td>
                             <td>{{ animal.date_weaned.strftime('%Y-%m-%d') if animal.date_weaned else '-' }}</td>
                             <td>{{ animal.cage_id }}</td>
                             <td>{{ animal.mother.animal_id if animal.mother else '-' }}</td>
@@ -229,7 +231,40 @@
 
 {% block scripts %}
 <script>
+// Age calculation function
+function calculateAge(dobString) {
+    // Parse the date of birth
+    const dob = new Date(dobString);
+    const today = new Date();
+    
+    // Calculate difference in milliseconds
+    const diffMs = today - dob;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    // Format based on age
+    if (diffDays < 14) {
+        // Less than 2 weeks - show in days
+        return diffDays + " days";
+    } else if (diffDays < 91) {
+        // Between 2 weeks and 3 months - show in weeks with 1 decimal
+        const weeks = (diffDays / 7).toFixed(1);
+        return weeks + " weeks";
+    } else {
+        // Over 3 months - show in months with 1 decimal
+        const months = (diffDays / 30.44).toFixed(1); // Average month length
+        return months + " months";
+    }
+}
+
 $(document).ready(function() {
+    // Calculate and display age for all animals
+    document.querySelectorAll('.animal-age').forEach(element => {
+        const dob = element.getAttribute('data-dob');
+        if(dob) {
+            element.textContent = calculateAge(dob);
+        }
+    });
+    
     // Handle clicking on animal ID to edit
     $('.animal-id-link').click(function(e) {
         e.preventDefault();
