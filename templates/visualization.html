@@ -1,12 +1,46 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12">
-        <h1 class="mb-4">Family Tree Visualization</h1>
-        <div class="card">
-            <div class="card-body">
-                <div id="cytoscape" style="width: 100%; height: 80vh;"></div>
+<div class="container mt-4">
+    <h1>{{ colony.name }}</h1>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <ul class="nav nav-tabs">
+                <li class="nav-item">
+                    <a class="nav-link {% if vis_type == 'animals' %}active{% endif %}" href="{{ url_for('visualization', vis_type='animals') }}">Animal Tree</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if vis_type == 'cages' %}active{% endif %}" href="{{ url_for('visualization', vis_type='cages') }}">Cage Tree</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <div id="cytoscape" style="width: 100%; height: 80vh;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-3">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <a href="{{ url_for('view_animals') }}" class="btn btn-secondary">Back to Animals</a>
+                    <a href="{{ url_for('view_cages') }}" class="btn btn-secondary">Back to Cages</a>
+                </div>
+                <div>
+                    <span class="badge bg-primary me-2 p-2">Blue: Homo (+/+)</span>
+                    <span class="badge bg-success me-2 p-2">Green: Het (+/-)</span>
+                    <span class="badge bg-danger me-2 p-2">Red: WT (-/-)</span>
+                    <span class="badge bg-light text-dark border p-2">Circles: Female</span>
+                    <span class="badge bg-light text-dark border p-2">Squares: Male</span>
+                </div>
             </div>
         </div>
     </div>
@@ -74,24 +108,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     'width': 1,
                     'line-color': '#666666',
                     'target-arrow-color': '#666666',
-                    'target-arrow-shape': 'triangle',
-                    'curve-style': 'bezier',
-                    'target-distance-from-node': 5
+                    'curve-style': 'bezier'
+                }
+            },
+            {
+                selector: 'edge[edge_type="parent"]',
+                style: {
+                    'target-arrow-shape': 'triangle'
+                }
+            },
+            {
+                selector: 'edge[edge_type="cage"]',
+                style: {
+                    'line-style': 'dashed',
+                    'line-color': '#999999'
                 }
             }
         ]
     });
 
-    // Custom layout function
-    function customLayout() {
+    // Custom layout function for animal tree
+    function customAnimalLayout() {
         const VERTICAL_SPACING = 200;
         const HORIZONTAL_SPACING = 200;
         const NODE_WIDTH = 100;
         const NODE_HEIGHT = 40;
 
         // Get all nodes and edges
-        const nodes = cy.nodes();
-        const edges = cy.edges();
+        const nodes = cy.nodes().filter(node => !node.data('node_type') || node.data('node_type') !== 'cage');
+        const edges = cy.edges().filter(edge => edge.data('edge_type') === 'parent');
 
         // Find root nodes (nodes with no parents)
         const rootNodes = nodes.filter(node => {
@@ -173,56 +218,152 @@ document.addEventListener('DOMContentLoaded', function() {
         cy.center();
     }
 
-    // Load colony data
-    fetch('/api/colony')
+    // Custom layout function for cage tree
+    function customCageLayout() {
+        const CAGE_SPACING = 300;
+        
+        // Get all cage nodes
+        const cageNodes = cy.nodes().filter(node => node.data('node_type') === 'cage');
+        
+        // Position cage nodes in a grid layout
+        const nodesPerRow = Math.ceil(Math.sqrt(cageNodes.length));
+        let row = 0;
+        let col = 0;
+        
+        cageNodes.forEach((cageNode, index) => {
+            cageNode.position({
+                x: col * CAGE_SPACING - ((nodesPerRow - 1) * CAGE_SPACING / 2),
+                y: row * CAGE_SPACING - 150
+            });
+            
+            col++;
+            if (col >= nodesPerRow) {
+                col = 0;
+                row++;
+            }
+        });
+        
+        // Center the graph
+        cy.center();
+    }
+
+    // Load colony data based on visualization type
+    const visType = '{{ vis_type }}';
+    const dataUrl = `/api/colony/${visType}`;
+    
+    fetch(dataUrl)
         .then(response => response.json())
         .then(data => {
-            // Debug: Log the first animal's data
-            if (data.animals && data.animals.length > 0) {
-                console.log("First animal data:", data.animals[0]);
-            }
+            console.log("Visualization data:", data);
             
-            // Create nodes
-            data.animals.forEach(animal => {
-                cy.add({
-                    data: {
-                        id: animal.animal_id,
-                        label: `${animal.animal_id}\n${animal.genotype}`,
-                        sex: animal.sex,
-                        genotype: animal.genotype
+            if (visType === 'animals') {
+                // Create nodes for animals
+                data.animals.forEach(animal => {
+                    cy.add({
+                        data: {
+                            id: animal.animal_id,
+                            label: `${animal.animal_id}\n${animal.genotype}`,
+                            sex: animal.sex,
+                            genotype: animal.genotype
+                        }
+                    });
+                });
+
+                // Create edges for parent relationships
+                data.animals.forEach(animal => {
+                    if (animal.mother_id) {
+                        cy.add({
+                            data: {
+                                source: animal.mother_id,
+                                target: animal.animal_id,
+                                edge_type: 'parent'
+                            }
+                        });
+                    }
+                    if (animal.father_id) {
+                        cy.add({
+                            data: {
+                                source: animal.father_id,
+                                target: animal.animal_id,
+                                edge_type: 'parent'
+                            }
+                        });
                     }
                 });
-            });
 
-            // Create edges
-            data.animals.forEach(animal => {
-                if (animal.mother_id) {
-                    cy.add({
-                        data: {
-                            source: animal.mother_id,
-                            target: animal.animal_id,
-                            type: 'mother'
+                // Run animal tree layout
+                customAnimalLayout();
+            } 
+            else if (visType === 'cages') {
+                // Create cage nodes
+                if (data.cages && data.cages.length > 0) {
+                    data.cages.forEach(cage => {
+                        // Determine predominant sex and genotype for the cage
+                        let maleCount = 0;
+                        let femaleCount = 0;
+                        let genotypeCount = {
+                            'Homo (+/+)': 0,
+                            'Het (+/-)': 0,
+                            'WT (-/-)': 0
+                        };
+                        
+                        // Count animals by sex and genotype
+                        cage.animals.forEach(animalId => {
+                            const animal = data.animals.find(a => a.animal_id === animalId);
+                            if (animal) {
+                                if (animal.sex === 'M') maleCount++;
+                                else if (animal.sex === 'F') femaleCount++;
+                                
+                                if (animal.genotype in genotypeCount) {
+                                    genotypeCount[animal.genotype]++;
+                                }
+                            }
+                        });
+                        
+                        // Determine predominant sex
+                        const cageSex = maleCount > femaleCount ? 'M' : 'F';
+                        
+                        // Determine predominant genotype
+                        let predominantGenotype = 'Mixed';
+                        let maxCount = 0;
+                        for (const [genotype, count] of Object.entries(genotypeCount)) {
+                            if (count > maxCount) {
+                                maxCount = count;
+                                predominantGenotype = genotype;
+                            }
                         }
+                        
+                        // Add cage node with properties
+                        cy.add({
+                            data: {
+                                id: `cage_${cage.cage_id}`,
+                                label: `Cage ${cage.cage_id}\n(${cage.animals.length} animals)`,
+                                node_type: 'cage',
+                                sex: cageSex,
+                                genotype: predominantGenotype,
+                                width: '120px',
+                                height: '60px'
+                            }
+                        });
                     });
+                    
+                    // Only cages are displayed, no animal nodes
+                    
+                    // Run cage tree layout
+                    customCageLayout();
                 }
-                if (animal.father_id) {
-                    cy.add({
-                        data: {
-                            source: animal.father_id,
-                            target: animal.animal_id,
-                            type: 'father'
-                        }
-                    });
+                else {
+                    // If no cages, display a message
+                    const message = document.createElement('div');
+                    message.innerHTML = '<div class="alert alert-info">No cages found in this colony. Add cage IDs to animals first.</div>';
+                    document.getElementById('cytoscape').appendChild(message);
                 }
-            });
-
-            // Run custom layout
-            customLayout();
+            }
 
             // Fit the graph to the viewport with padding
             cy.fit(100);
 
-            // Add zoom controls
+            // Add hover effects
             cy.on('mouseover', 'node', function(e) {
                 e.target.style('border-width', '2px');
             });
@@ -243,7 +384,12 @@ document.addEventListener('DOMContentLoaded', function() {
             zoomOut.onclick = () => cy.zoom(cy.zoom() * 0.8);
             document.body.appendChild(zoomOut);
         })
-        .catch(error => console.error('Error loading colony data:', error));
+        .catch(error => {
+            console.error('Error loading colony data:', error);
+            const message = document.createElement('div');
+            message.innerHTML = `<div class="alert alert-danger">Error loading data: ${error.message}</div>`;
+            document.getElementById('cytoscape').appendChild(message);
+        });
 });
 </script>
 {% endblock %} 
