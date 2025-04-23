@@ -906,56 +906,98 @@ def edit_cage():
     """Update all animals in a cage with the specified properties"""
     global current_colony
     
+    print("\n----- EDIT CAGE REQUEST RECEIVED -----")
+    print(f"Request method: {request.method}")
+    print(f"Content type: {request.content_type}")
+    print(f"Request data: {request.data}")
+    print(f"Request form: {request.form}")
+    
     if not current_colony:
+        print("No active colony found, trying to recover from session")
         # Try to recover the colony from session if possible
         colony_name = session.get('colony_name')
+        print(f"Colony name from session: {colony_name}")
+        
         if colony_name and os.path.exists(f'colonies/{colony_name}.json'):
             try:
+                print(f"Loading colony from file: colonies/{colony_name}.json")
                 current_colony = load_colony(colony_name)
+                print(f"Successfully loaded colony with {len(current_colony.animals)} animals")
             except Exception as e:
+                print(f"Failed to load colony: {e}")
+                traceback.print_exc()
                 return jsonify({'success': False, 'error': 'Failed to load colony. Please reload your colony.'}), 400
         else:
+            print("No colony in session or colony file not found")
             return jsonify({'success': False, 'error': 'No colony selected or colony not found. Please select a colony.'}), 400
+    else:
+        print(f"Using active colony: {current_colony.name} with {len(current_colony.animals)} animals")
     
     try:
         # Get data from request
         data = None
         
         if request.is_json:
+            print("Request is JSON format")
             data = request.get_json()
+            print(f"Parsed JSON data: {data}")
         else:
+            print("Request is not JSON format, trying alternative parsing")
             try:
                 # Try to parse the request data as JSON manually
                 request_data = request.data.decode('utf-8') if hasattr(request.data, 'decode') else str(request.data)
+                print(f"Raw request data: {request_data}")
                 data = json.loads(request_data)
-            except Exception:
+                print(f"Manually parsed JSON data: {data}")
+            except Exception as e:
+                print(f"Failed to parse as JSON: {e}")
                 # Fall back to form data
                 data = request.form.to_dict()
+                print(f"Form data: {data}")
                 
                 # If still no data, try to parse the raw request
                 if not data and request_data:
                     try:
+                        print("Trying to parse as URL-encoded data")
                         import urllib.parse
                         parsed_data = urllib.parse.parse_qs(request_data)
                         data = {k: v[0] for k, v in parsed_data.items()}
-                    except Exception:
-                        pass
+                        print(f"URL-encoded data: {data}")
+                    except Exception as e:
+                        print(f"Failed to parse as URL-encoded: {e}")
         
         if not data:
+            print("ERROR: No data could be extracted from request")
             return jsonify({'success': False, 'error': 'No data provided or could not parse request data'}), 400
             
         # Check if we should skip straight to redirect for non-AJAX requests
         view_response = data.get('view_response', False)
+        print(f"View response flag: {view_response}")
             
         cage_id = data.get('cage_id')
         if not cage_id:
+            print("ERROR: No cage ID provided in request data")
             return jsonify({'success': False, 'error': 'No cage ID provided'}), 400
-        
-        # Find all animals in the cage
+
+        # Find all animals in the specified cage
+        print(f"Looking for animals in cage: {cage_id}")
         animals_in_cage = [animal for animal in current_colony.animals if animal.cage_id == cage_id]
-        
+        print(f"Found {len(animals_in_cage)} animals in cage {cage_id}")
         if not animals_in_cage:
+            print(f"ERROR: No animals found in cage {cage_id}")
             return jsonify({'success': False, 'error': f'No animals found in cage {cage_id}'}), 404
+        
+        # Update cage ID for each animal
+        new_cage_id = data.get('new_cage_id')
+        if new_cage_id and new_cage_id != cage_id:
+            print(f"Updating cage ID from {cage_id} to {new_cage_id}")
+            for animal in animals_in_cage:
+                old_id = animal.animal_id
+                suffix = animal.animal_id.split('_', 1)[1] if '_' in animal.animal_id else '1'
+                animal.animal_id = f"{new_cage_id}_{suffix}"
+                animal.cage_id = new_cage_id
+                print(f"  Updated animal ID from {old_id} to {animal.animal_id}")
+            print(f"Updated cage ID for {len(animals_in_cage)} animals")
         
         # Get the properties to update
         sex = data.get('sex')
@@ -964,53 +1006,73 @@ def edit_cage():
         date_weaned_str = data.get('date_weaned')
         notes = data.get('notes', '')
         
+        print(f"Properties to update - sex: {sex}, genotype: {genotype}, dob: {dob_str}, weaned: {date_weaned_str}, notes: {notes}")
+        
         # Convert date strings to date objects
         dob = None
         if dob_str:
             try:
                 dob = date.fromisoformat(dob_str)
-            except ValueError:
+                print(f"Parsed DOB: {dob}")
+            except ValueError as e:
+                print(f"Error parsing DOB: {e}")
                 return jsonify({'success': False, 'error': f'Invalid date of birth format: {dob_str}'}), 400
                 
         date_weaned = None
         if date_weaned_str:
             try:
                 date_weaned = date.fromisoformat(date_weaned_str)
-            except ValueError:
+                print(f"Parsed date weaned: {date_weaned}")
+            except ValueError as e:
+                print(f"Error parsing date weaned: {e}")
                 return jsonify({'success': False, 'error': f'Invalid date weaned format: {date_weaned_str}'}), 400
         
         # Update each animal in the cage
         for animal in animals_in_cage:
+            print(f"Updating animal: {animal.animal_id}")
             if sex:
+                print(f"  Changing sex from {animal.sex} to {sex}")
                 animal.sex = sex
             if genotype:
+                print(f"  Changing genotype from {animal.genotype} to {genotype}")
                 animal.genotype = genotype
             if dob:
+                print(f"  Changing DOB from {animal.dob} to {dob}")
                 animal.dob = dob
             if date_weaned:
+                old_date = getattr(animal, 'date_weaned', None)
+                print(f"  Changing date weaned from {old_date} to {date_weaned}")
                 animal.date_weaned = date_weaned
             if notes is not None:  # Allow empty notes to clear existing notes
+                old_notes = getattr(animal, 'notes', '')
+                print(f"  Changing notes from '{old_notes}' to '{notes}'")
                 animal.notes = notes
         
         # Save the colony
+        print(f"Saving colony {current_colony.name} with updated animals")
         save_colony(current_colony, current_colony.name)
+        print("Colony saved successfully")
         
         # For normal form submission, redirect instead of returning JSON
         if view_response and not request.is_json:
+            print("Redirecting to view_cages")
             return redirect(url_for('view_cages'))
         
         # Otherwise return JSON response
-        return jsonify({
+        print("Returning JSON success response")
+        response = {
             'success': True,
             'message': f'Updated {len(animals_in_cage)} animals in cage {cage_id}',
             'colony_name': current_colony.name,
             'animals_updated': [animal.animal_id for animal in animals_in_cage],
             'redirect_url': url_for('view_cages')
-        })
+        }
+        print(f"Response: {response}")
+        return jsonify(response)
     
     except Exception as e:
         # Log error but don't expose all details to client
-        print(f"Error in edit_cage: {str(e)}")
+        print(f"ERROR in edit_cage: {str(e)}")
         traceback.print_exc()
         return jsonify({
             'success': False, 

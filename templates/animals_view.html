@@ -154,7 +154,7 @@
                                             </div>
                                             <div class="form-group">
                                                 <label for="editNotes{{ animal.animal_id }}">Notes</label>
-                                                <textarea class="form-control" id="editNotes{{ animal.animal_id }}" name="notes" rows="3">{{ animal.notes }}</textarea>
+                                                <textarea class="form-control" id="editNotes{{ animal.animal_id }}" name="notes" rows="3">{{ animal.notes or '' }}</textarea>
                                             </div>
                                         </form>
                                     </div>
@@ -295,64 +295,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Open the modal
             new bootstrap.Modal(document.getElementById('editAnimalModal' + animalId)).show();
-        });
-    });
-    
-    // Handle animal edit form submissions
-    document.querySelectorAll('.edit-animal-form').forEach(form => {
-        form.addEventListener('submit', function(event) {
-            event.preventDefault();
-            console.log('Animal edit form submitted');
-            
-            const animalId = this.querySelector('[name="original_id"]').value;
-            console.log('Processing animal ID:', animalId);
-            
-            // Create data object manually
-            const data = {
-                original_id: this.querySelector('[name="original_id"]').value,
-                animal_id: this.querySelector('[name="animal_id"]').value,
-                sex: this.querySelector('[name="sex"]').value,
-                genotype: this.querySelector('[name="genotype"]').value,
-                dob: this.querySelector('[name="dob"]').value,
-                date_weaned: this.querySelector('[name="date_weaned"]').value,
-                mother_id: this.querySelector('[name="mother_id"]').value,
-                father_id: this.querySelector('[name="father_id"]').value,
-                cage_id: this.querySelector('[name="cage_id"]').value,
-                notes: this.querySelector('[name="notes"]').value
-            };
-            
-            console.log('Sending data:', data);
-            
-            // Use fetch API to submit the form asynchronously
-            fetch('/edit_animal/' + animalId, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify(data)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.text().then(text => {
-                        throw new Error(text || response.statusText);
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.success) {
-                    console.log('Animal updated successfully');
-                    window.location.reload();
-                } else {
-                    console.error('Error updating animal:', data.error);
-                    alert('Error updating animal: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Error updating animal:', error);
-                alert('Error updating animal: ' + error.message);
-            });
         });
     });
 });
