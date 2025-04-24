@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}{{ colony.name }} - Add Breeder Cage{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6">
+        <h1 class="mb-4">Add Breeder Cage</h1>
+        <form id="addBreederCageForm" method="post">
+            <div class="mb-3">
+                <label for="cageId" class="form-label">Cage ID</label>
+                <input type="text" class="form-control" id="cageId" name="cage_id" required>
+            </div>
+            <div class="mb-3">
+                <label for="motherId" class="form-label">Mother ID</label>
+                <select class="form-select" id="motherId" name="mother_id" required>
+                    <option value="">Select Mother</option>
+                    {% for animal in colony.get_females() %}
+                    <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="fatherId" class="form-label">Father ID</label>
+                <select class="form-select" id="fatherId" name="father_id" required>
+                    <option value="">Select Father</option>
+                    {% for animal in colony.get_males() %}
+                    <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="dateMated" class="form-label">Date Mated</label>
+                <input type="date" class="form-control" id="dateMated" name="date_mated">
+            </div>
+            <div class="mb-3">
+                <label for="notes" class="form-label">Notes</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Add Breeder Cage</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('addBreederCageForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const cageId = document.getElementById('cageId').value;
+    const mother = document.getElementById('motherId').value;
+    const father = document.getElementById('fatherId').value;
+    const dateMated = document.getElementById('dateMated').value;
+    const notes = document.getElementById('notes').value;
+    if (!cageId || !mother || !father) {
+        alert('Please fill in all required fields');
+        return;
+    }
+    const data = {
+        cage_id: cageId,
+        mother_id: mother,
+        father_id: father,
+        date_mated: dateMated || null,
+        notes: notes || null
+    };
+    console.log('Sending data:', data);
+    fetch('/add_breeder_cage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(res => {
+        if (!res.ok) return res.text().then(t => { throw new Error(t || res.statusText); });
+        return res.json();
+    })
+    .then(resp => {
+        if (resp.success) {
+            window.location.href = '/colony/cages';
+        } else {
+            alert('Error: ' + (resp.error || 'Failed to add breeder cage'));
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Error adding breeder cage: ' + err.message);
+    });
+});
+</script>
+{% endblock %} 

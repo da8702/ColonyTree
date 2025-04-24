@@ -8,6 +8,12 @@ import plotly.graph_objects as go
 import networkx as nx
 from models import Colony, Animal
 
+# Import graphviz_layout for hierarchical layout, fall back to pydot if needed
+try:
+    from networkx.drawing.nx_agraph import graphviz_layout
+except ImportError:
+    from networkx.drawing.nx_pydot import graphviz_layout
+
 # Load Cytoscape extension
 cyto.load_extra_layouts()
 
@@ -57,8 +63,27 @@ def create_family_tree():
     
     print(f"Created graph with {len(G.nodes())} nodes and {len(G.edges())} edges")
     
-    # Create the plot
-    pos = nx.spring_layout(G, k=1, iterations=50)
+    # Compute generation levels for multipartite layout
+    generations = {}
+    # Roots (no parents) are generation 0
+    for node in G.nodes():
+        if G.in_degree(node) == 0:
+            generations[node] = 0
+    # Propagate generation levels to children
+    changed = True
+    while changed:
+        changed = False
+        for parent, child in G.edges():
+            if parent in generations and child not in generations:
+                generations[child] = generations[parent] + 1
+                changed = True
+    nx.set_node_attributes(G, generations, 'generation')
+    # Try Graphviz dot layout first, fallback to multipartite layered layout
+    try:
+        pos = graphviz_layout(G, prog='dot')
+    except Exception as e:
+        print(f"Graphviz layout failed ({e}), falling back to layered multipartite layout")
+        pos = nx.multipartite_layout(G, subset_key='generation', align='vertical')
     
     # Create edges
     edge_x = []

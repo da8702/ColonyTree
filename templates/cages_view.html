@@ -5,168 +5,101 @@
 {% block content %}
 <div class="container mt-4">
     <h1>{{ colony.name }}</h1>
-    
-    <div class="row">
-        <div class="col-md-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>Cages</h2>
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#renameColonyModal">
-                        Rename Colony
-                    </button>
-                    <a href="{{ url_for('view_animals') }}" class="btn btn-secondary">Animals</a>
-                    <a href="{{ url_for('add_animal') }}" class="btn btn-primary">Add Animal</a>
-                    <a href="{{ url_for('add_cage') }}" class="btn btn-primary">Add Cage</a>
-                    <a href="{{ url_for('visualization', vis_type='cages') }}" class="btn btn-info">View Tree</a>
-                </div>
-            </div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Cages</h2>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#renameColonyModal">Rename Colony</button>
+            <a href="{{ url_for('view_animals') }}" class="btn btn-secondary">Animals</a>
+            <a href="{{ url_for('add_animal') }}" class="btn btn-primary">Add Animal</a>
+            <a href="{{ url_for('add_cage') }}" class="btn btn-primary">Add Cage</a>
+            <a href="{{ url_for('add_breeder_cage') }}" class="btn btn-primary">Add Breeder Cage</a>
+            <a href="{{ url_for('visualization', vis_type='cages') }}" class="btn btn-info">View Tree</a>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-md-12">
-            {% if colony.animals %}
-        
-            {% set cages = {} %}
-            {% for animal in colony.animals %}
-                {# Exclude None or invalid cage IDs #}
-                {% if animal.cage_id is not none and animal.cage_id != 'None' and animal.cage_id != '' %}
-                    {% if animal.cage_id not in cages %}
-                        {% set _ = cages.update({animal.cage_id: []}) %}
-                    {% endif %}
-                    {% set _ = cages[animal.cage_id].append(animal) %}
-                {% endif %}
+    {# Breeder Cages Section #}
+    <h2>Breeder Cages</h2>
+    {% if colony.breeder_cages %}
+    <div class="table-responsive mb-4">
+        <table class="table table-striped">
+            <thead><tr><th>Cage ID</th><th>Mother</th><th>Father</th><th>Date Mated</th><th>Notes</th></tr></thead>
+            <tbody>
+            {% for bc in colony.breeder_cages %}
+                <tr>
+                    <td>{{ bc.cage_id }}</td>
+                    <td>{{ bc.mother_id }}</td>
+                    <td>{{ bc.father_id }}</td>
+                    <td>{{ bc.date_mated or '-' }}</td>
+                    <td>{{ bc.notes or '' }}</td>
+                </tr>
             {% endfor %}
-        
-            {% if cages %}
-            <div class="table-responsive">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>Cage ID</th>
-                            <th>Animal Count</th>
-                            <th>Animals</th>
-                            <th>Sex</th>
-                            <th>Genotype</th>
-                            <th>Date of Birth</th>
-                            <th>Age</th>
-                            <th>Date Weaned</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for cage_id, animals in cages.items() %}
-                        <tr>
-                            <td>
-                                <a href="#" 
-                                   class="text-decoration-none cage-id-link"
-                                   data-bs-toggle="modal" 
-                                   data-bs-target="#editCageModal{{ cage_id|replace('.', '_') }}"
-                                   data-cage-id="{{ cage_id }}"
-                                   data-sex="{{ sex if all_same_sex else '' }}"
-                                   data-genotype="{{ genotype if all_same_genotype else '' }}"
-                                   data-dob="{{ dob.strftime('%Y-%m-%d') if all_same_dob else '' }}"
-                                   data-date-weaned="{{ date_weaned.strftime('%Y-%m-%d') if all_same_weaned and date_weaned else '' }}">
-                                    {{ cage_id }}
-                                </a>
-                            </td>
-                            <td>{{ animals|length }}</td>
-                            <td>
-                                <small>
-                                {% for animal in animals %}
-                                    <a href="#" class="text-decoration-none" data-bs-toggle="modal" data-bs-target="#editAnimalModal{{ animal.animal_id }}">
-                                        {{ animal.animal_id }}
-                                    </a>{% if not loop.last %}, {% endif %}
-                                {% endfor %}
-                                </small>
-                            </td>
-                            {% set all_same_sex = true %}
-                            {% set sex = animals[0].sex %}
-                            {% for animal in animals %}
-                                {% if animal.sex != sex %}
-                                    {% set all_same_sex = false %}
-                                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info mb-4">No breeder cages. Click "Add Breeder Cage" to create one.</div>
+    {% endif %}
+
+    <hr />
+
+    {# Regular Cages Section #}
+    {% if colony.animals %}
+        {% set cages = {} %}
+        {% for animal in colony.animals %}
+            {% if animal.cage_id %}
+                {% if animal.cage_id not in cages %}
+                    {% set _ = cages.update({animal.cage_id: []}) %}
+                {% endif %}
+                {% set _ = cages[animal.cage_id].append(animal) %}
+            {% endif %}
+        {% endfor %}
+
+        {% if cages %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Cage ID</th><th>Count</th><th>Animals</th><th>Sex</th><th>Genotype</th><th>DOB</th><th>Age</th><th>Weaned</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for cage_id, animals in cages.items() %}
+                    <tr>
+                        <td><a href="#" class="text-decoration-none" data-bs-toggle="modal" data-bs-target="#editCageModal{{ cage_id|replace('.', '_') }}">{{ cage_id }}</a></td>
+                        <td>{{ animals|length }}</td>
+                        <td>{% for a in animals %}{{ a.animal_id }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+                        {# Display Sex (unique) #}
+                        {% set uniq_sexes = animals|map(attribute='sex')|unique|list %}
+                        <td>
+                            {% if uniq_sexes|length == 1 %}
+                                {% if uniq_sexes[0] == 'M' %}Male{% elif uniq_sexes[0] == 'F' %}Female{% else %}{{ uniq_sexes[0] }}{% endif %}
+                            {% else %}
+                                Mixed
+                            {% endif %}
+                        </td>
+                        {# Display Genotype (unique) #}
+                        {% set uniq_genos = animals|map(attribute='genotype')|unique|list %}
+                        <td>{% for g in uniq_genos %}{{ g }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+                        {# Display DOB (unique) #}
+                        {% set uniq_dobs = animals|map(attribute='dob')|unique|list %}
+                        <td>{% for d in uniq_dobs %}{{ d.strftime('%Y-%m-%d') }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+                        {# Age column #}
+                        <td class="cage-age" data-dob-list="{% for a in animals %}{{ a.dob.strftime('%Y-%m-%d') }}{% if not loop.last %},{% endif %}{% endfor %}">Loading...</td>
+                        {# Display Weaned dates (unique) #}
+                        {% set uniq_weans = animals|map(attribute='date_weaned')|unique|list %}
+                        <td>
+                            {% for w in uniq_weans %}
+                                {% if w %}{{ w.strftime('%Y-%m-%d') }}{% else %}-{% endif %}{% if not loop.last %}, {% endif %}
                             {% endfor %}
-                            
-                            <td>
-                                {% if all_same_sex %}
-                                    {{ sex }}
-                                {% else %}
-                                    <span class="text-muted">Mixed</span>
-                                {% endif %}
-                            </td>
-                            
-                            {% set all_same_genotype = true %}
-                            {% set genotype = animals[0].genotype %}
-                            {% for animal in animals %}
-                                {% if animal.genotype != genotype %}
-                                    {% set all_same_genotype = false %}
-                                {% endif %}
-                            {% endfor %}
-                            
-                            <td>
-                                {% if all_same_genotype %}
-                                    {{ genotype }}
-                                {% else %}
-                                    <span class="text-muted">Mixed</span>
-                                {% endif %}
-                            </td>
-                            
-                            {% set all_same_dob = true %}
-                            {% set dob = animals[0].dob %}
-                            {% for animal in animals %}
-                                {% if animal.dob != dob %}
-                                    {% set all_same_dob = false %}
-                                {% endif %}
-                            {% endfor %}
-                            
-                            <td>
-                                {% if all_same_dob %}
-                                    {{ dob.strftime('%Y-%m-%d') }}
-                                {% else %}
-                                    <span class="text-muted">Mixed</span>
-                                {% endif %}
-                            </td>
-                            
-                            <td class="cage-age" data-dob-list="{% for animal in animals %}{{ animal.dob.strftime('%Y-%m-%d') }}{% if not loop.last %},{% endif %}{% endfor %}">
-                                Loading...
-                            </td>
-                            
-                            {% set all_same_weaned = true %}
-                            {% set date_weaned = animals[0].date_weaned %}
-                            {% for animal in animals %}
-                                {% if animal.date_weaned != date_weaned %}
-                                    {% set all_same_weaned = false %}
-                                {% endif %}
-                            {% endfor %}
-                            
-                            <td>
-                                {% if all_same_weaned %}
-                                    {% if date_weaned %}
-                                        {{ date_weaned.strftime('%Y-%m-%d') }}
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                {% else %}
-                                    <span class="text-muted">Mixed</span>
-                                {% endif %}
-                            </td>
-                            
-                            <td>
-                                <button type="button" 
-                                        class="btn btn-sm btn-danger" 
-                                        data-bs-toggle="modal" 
-                                        data-bs-target="#deleteCageModal{{ cage_id|replace('.', '_') }}">
-                                    Delete
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <!-- Move modals outside the table -->
-            {% for cage_id, animals in cages.items() %}
+                        </td>
+                        <td><button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteCageModal{{ cage_id|replace('.', '_') }}">Delete</button></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {# Modals for edit/delete are unchanged and follow here #}
+        {% for cage_id, animals in cages.items() %}
             <!-- Edit Cage Modal -->
             <div class="modal fade" id="editCageModal{{ cage_id|replace('.', '_') }}" tabindex="-1">
                 <div class="modal-dialog modal-lg">
@@ -187,29 +120,33 @@
                                 <div class="form-group mb-3">
                                     <label class="form-label">Sex</label>
                                     <select class="form-control" name="sex">
-                                        <option value="M" {% if all_same_sex and sex == 'M' %}selected{% endif %}>Male</option>
-                                        <option value="F" {% if all_same_sex and sex == 'F' %}selected{% endif %}>Female</option>
+                                        <option value="M" {% if animals|map(attribute='sex')|unique|list|length == 1 and animals[0].sex == 'M' %}selected{% endif %}>Male</option>
+                                        <option value="F" {% if animals|map(attribute='sex')|unique|list|length == 1 and animals[0].sex == 'F' %}selected{% endif %}>Female</option>
                                     </select>
                                 </div>
                                 <div class="form-group mb-3">
                                     <label class="form-label">Genotype</label>
                                     <select class="form-control" name="genotype">
-                                        <option value="Homo (+/+)" {% if all_same_genotype and genotype == 'Homo (+/+)' %}selected{% endif %}>Homo (+/+)</option>
-                                        <option value="Het (+/-)" {% if all_same_genotype and genotype == 'Het (+/-)' %}selected{% endif %}>Het (+/-)</option>
-                                        <option value="WT (-/-)" {% if all_same_genotype and genotype == 'WT (-/-)' %}selected{% endif %}>WT (-/-)</option>
+                                        <option value="Homo (+/+)" {% if animals|map(attribute='genotype')|unique|list|length == 1 and animals[0].genotype == 'Homo (+/+)' %}selected{% endif %}>Homo (+/+)</option>
+                                        <option value="Het (+/-)" {% if animals|map(attribute='genotype')|unique|list|length == 1 and animals[0].genotype == 'Het (+/-)' %}selected{% endif %}>Het (+/-)</option>
+                                        <option value="WT (-/-)" {% if animals|map(attribute='genotype')|unique|list|length == 1 and animals[0].genotype == 'WT (-/-)' %}selected{% endif %}>WT (-/-)</option>
                                     </select>
                                 </div>
                                 <div class="form-group mb-3">
                                     <label class="form-label">Date of Birth</label>
-                                    <input type="date" class="form-control" name="dob" value="{{ dob.strftime('%Y-%m-%d') if all_same_dob else '' }}">
+                                    {# Use first animal's DOB if available #}
+                                    {% set first_dob = animals and animals[0].dob %}
+                                    <input type="date" class="form-control" name="dob" value="{{ first_dob and first_dob.strftime('%Y-%m-%d') or '' }}">
                                 </div>
                                 <div class="form-group mb-3">
                                     <label class="form-label">Date Weaned</label>
-                                    <input type="date" class="form-control" name="date_weaned" value="{{ date_weaned.strftime('%Y-%m-%d') if all_same_weaned and date_weaned else '' }}">
+                                    {# Use first animal's date_weaned if available #}
+                                    {% set first_weaned = animals and animals[0].date_weaned %}
+                                    <input type="date" class="form-control" name="date_weaned" value="{{ first_weaned and first_weaned.strftime('%Y-%m-%d') or '' }}">
                                 </div>
                                 <div class="form-group mb-3">
                                     <label class="form-label">Notes</label>
-                                    <textarea class="form-control" name="notes" rows="3"></textarea>
+                                    <textarea class="form-control" name="notes" rows="3">{{ animals|map(attribute='notes')|unique|list|length == 1 and animals[0].notes or '' }}</textarea>
                                 </div>
                                 <!-- Direct submit button for non-JavaScript fallback -->
                                 <div class="d-none">
@@ -246,20 +183,13 @@
                     </div>
                 </div>
             </div>
-            {% endfor %}
-            {% else %}
-            <div class="alert alert-info">
-                No cages in this colony. Add animals with cage IDs to create cages.
-            </div>
-            {% endif %}
-            
-            {% else %}
-            <div class="alert alert-info">
-                No animals in this colony. Add some animals to get started.
-            </div>
-            {% endif %}
-        </div>
-    </div>
+        {% endfor %}
+        {% else %}
+        <div class="alert alert-info">No cages in this colony. Add animals with cage IDs to create cages.</div>
+        {% endif %}
+    {% else %}
+    <div class="alert alert-info">No animals in this colony. Add some animals to get started.</div>
+    {% endif %}
 
     <!-- Rename Colony Modal -->
     <div class="modal fade" id="renameColonyModal" tabindex="-1">

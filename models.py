@@ -65,6 +65,7 @@ class Colony:
     def __init__(self, name: str):
         self.name = name
         self.animals: List[Animal] = []
+        self.breeder_cages: List[dict] = []
 
     def add_animal(self, animal: Animal):
         """Add an animal to the colony"""
@@ -148,11 +149,13 @@ class Colony:
     
     def get_males(self):
         """Get all male animals in the colony"""
-        return [a for a in self.animals if a.sex == "Male"]
+        # Accept both 'M' and 'Male' values
+        return [a for a in self.animals if (isinstance(a.sex, str) and a.sex in ('M', 'Male'))]
 
     def get_females(self):
         """Get all female animals in the colony"""
-        return [a for a in self.animals if a.sex == "Female"]
+        # Accept both 'F' and 'Female' values
+        return [a for a in self.animals if (isinstance(a.sex, str) and a.sex in ('F', 'Female'))]
 
     def get_animal_with_cage(self, animal_id):
         """Get an animal by its ID, including cage information"""
@@ -172,10 +175,12 @@ class Colony:
     
     def to_dict(self):
         """Convert colony to dictionary for JSON serialization"""
-        return {
+        data = {
             'name': self.name,
-            'animals': [animal.to_dict() for animal in self.animals]
+            'animals': [animal.to_dict() for animal in self.animals],
+            'breeder_cages': self.breeder_cages
         }
+        return data
     
     @classmethod
     def from_dict(cls, data: dict):
@@ -200,7 +205,7 @@ class Colony:
                 father = animal_dict[animal_data['father_id']]
                 animal.father = father
                 father.children.append(animal)
-        
+        colony.breeder_cages = data.get('breeder_cages', [])
         return colony
 
     def to_json(self):

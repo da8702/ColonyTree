@@ -75,7 +75,8 @@ def save_colony(colony, filename):
     
     data = {
         'name': colony.name,
-        'animals': []
+        'animals': [],
+        'breeder_cages': colony.breeder_cages
     }
     
     for animal in colony.animals:
@@ -158,6 +159,8 @@ def load_colony(filename):
             except Exception as e:
                 print(f"Error setting father for animal {animal.animal_id}: {str(e)}")
     
+    # Load breeder cages if present
+    colony.breeder_cages = data.get('breeder_cages', [])
     return colony
 
 @app.before_request
@@ -271,6 +274,10 @@ def view_cages():
     colony_name_in_session = session.get('colony_name', 'None')
     print(f"Rendering cages view with colony: {current_colony.name}")
     print(f"Colony in session: {has_colony_in_session}, name: {colony_name_in_session}")
+    # Debug: print all animal IDs and cage assignments
+    print("DEBUG: Animals and their cages:")
+    for a in current_colony.animals:
+        print(f"  {a.animal_id}: cage_id={a.cage_id}, sex={a.sex}, dob={a.dob}")
     
     # Pass extra debug info to the template
     template_data = {
@@ -435,17 +442,17 @@ def delete_animal(animal_id):
         animal = current_colony.get_animal(animal_id)
         if animal:
             # Remove parent-child relationships
-            if animal.mother:
+            if animal.mother and animal in animal.mother.children:
                 try:
                     animal.mother.children.remove(animal)
-                except (ValueError, AttributeError) as e:
-                    print(f"Warning: Could not remove animal from mother's children: {e}")
+                except ValueError:
+                    print(f"Warning: could not remove {animal.animal_id} from previous mother's children list")
             
-            if animal.father:
+            if animal.father and animal in animal.father.children:
                 try:
                     animal.father.children.remove(animal)
-                except (ValueError, AttributeError) as e:
-                    print(f"Warning: Could not remove animal from father's children: {e}")
+                except ValueError:
+                    print(f"Warning: could not remove {animal.animal_id} from previous father's children list")
             
             # Remove references to this animal as a parent from other animals
             for other_animal in current_colony.animals:
@@ -585,7 +592,10 @@ def edit_animal(animal_id):
             print(f"Changing mother from {old_mother_id} to {mother_id}")
             # If there was a previous mother, remove this animal from her children
             if animal.mother:
-                animal.mother.children.remove(animal)
+                try:
+                    animal.mother.children.remove(animal)
+                except ValueError:
+                    print(f"Warning: could not remove {animal.animal_id} from previous mother's children list")
             
             # Set the new mother
             if mother_id:
@@ -603,9 +613,12 @@ def edit_animal(animal_id):
         old_father_id = animal.father.animal_id if animal.father else None
         if father_id != old_father_id:
             print(f"Changing father from {old_father_id} to {father_id}")
-            # If there was a previous father, remove this animal from his children
-            if animal.father:
-                animal.father.children.remove(animal)
+            # If there was a previous father, remove this animal from his children safely
+            if animal.father and animal in animal.father.children:
+                try:
+                    animal.father.children.remove(animal)
+                except Exception as e:
+                    print(f"Warning: failed to remove {animal.animal_id} from old father's children: {e}")
             
             # Set the new father
             if father_id:
@@ -875,18 +888,17 @@ def delete_cage():
         for animal in animals_to_delete:
             print(f"Removing animal: {animal.animal_id}")
             # Remove parent-child relationships
-            if animal.mother:
+            if animal.mother and animal in animal.mother.children:
                 try:
-                    if hasattr(animal.mother, 'children'):
-                        animal.mother.children.remove(animal)
+                    animal.mother.children.remove(animal)
                 except ValueError:
-                    print(f"Could not remove animal {animal.animal_id} from mother's children list")
-            if animal.father:
+                    print(f"Warning: could not remove {animal.animal_id} from previous mother's children list")
+            
+            if animal.father and animal in animal.father.children:
                 try:
-                    if hasattr(animal.father, 'children'):
-                        animal.father.children.remove(animal)
+                    animal.father.children.remove(animal)
                 except ValueError:
-                    print(f"Could not remove animal {animal.animal_id} from father's children list")
+                    print(f"Warning: could not remove {animal.animal_id} from previous father's children list")
             
             # Remove the animal from the colony
             current_colony.animals.remove(animal)
@@ -1078,6 +1090,58 @@ def edit_cage():
             'success': False, 
             'error': str(e)
         }), 500
+
+# Add breeder cage route
+@app.route('/add_breeder_cage', methods=['GET', 'POST'])
+def add_breeder_cage():
+    """Add a new breeder cage with specified parents and optional date mated/notes"""
+    global current_colony
+    if not current_colony:
+        return redirect(url_for('list_colonies'))
+
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            cage_id = data.get('cage_id')
+            mother_id = data.get('mother_id')
+            father_id = data.get('father_id')
+            date_mated = data.get('date_mated')
+            notes = data.get('notes')
+
+            # Validate required fields
+            if not cage_id or not mother_id or not father_id:
+                return jsonify({'success': False, 'error': 'Cage ID, mother ID, and father ID are required'}), 400
+
+            mother = current_colony.get_animal(mother_id)
+            father = current_colony.get_animal(father_id)
+            if not mother or mother.sex != 'F':
+                return jsonify({'success': False, 'error': f'Mother {mother_id} not found or not female'}), 400
+            if not father or father.sex != 'M':
+                return jsonify({'success': False, 'error': f'Father {father_id} not found or not male'}), 400
+
+            # Append breeder cage entry
+            breeder_entry = {
+                'cage_id': cage_id,
+                'mother_id': mother_id,
+                'father_id': father_id,
+                'date_mated': date_mated,
+                'notes': notes
+            }
+            current_colony.breeder_cages.append(breeder_entry)
+
+            # Update parents' cage assignment
+            mother.cage_id = cage_id
+            father.cage_id = cage_id
+
+            save_colony(current_colony, current_colony.name)
+            return jsonify({'success': True})
+        except Exception as e:
+            print(f"Error adding breeder cage: {e}")
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # GET request
+    return render_template('add_breeder_cage.html', colony=current_colony)
 
 if __name__ == '__main__':
     print("Starting Animal Colony Manager...")
