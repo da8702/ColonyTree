@@ -1143,6 +1143,52 @@ def add_breeder_cage():
     # GET request
     return render_template('add_breeder_cage.html', colony=current_colony)
 
+# Add edit breeder cage handling route
+@app.route('/edit_breeder_cage', methods=['POST'])
+def edit_breeder_cage():
+    """Edit an existing breeder cage's properties"""
+    global current_colony
+    if not current_colony:
+        return redirect(url_for('list_colonies'))
+
+    # Get form values
+    original_cage_id = request.form.get('original_cage_id')
+    new_cage_id = request.form.get('new_cage_id') or original_cage_id
+    mother_id = request.form.get('mother_id')
+    father_id = request.form.get('father_id')
+    date_mated = request.form.get('date_mated') or None
+    notes = request.form.get('notes') or ''
+
+    for bc in current_colony.breeder_cages:
+        if bc['cage_id'] == original_cage_id:
+            # Rename breeder cage if needed
+            if new_cage_id and new_cage_id != original_cage_id:
+                # Prevent duplicates
+                if any(b['cage_id'] == new_cage_id for b in current_colony.breeder_cages):
+                    # Skip renaming if already exists
+                    pass
+                else:
+                    bc['cage_id'] = new_cage_id
+                    # Update parent animal cage_id
+                    parent_mom = current_colony.get_animal(bc['mother_id'])
+                    parent_dad = current_colony.get_animal(bc['father_id'])
+                    if parent_mom:
+                        parent_mom.cage_id = new_cage_id
+                    if parent_dad:
+                        parent_dad.cage_id = new_cage_id
+            # Update other fields
+            bc['mother_id'] = mother_id
+            bc['father_id'] = father_id
+            bc['date_mated'] = date_mated
+            bc['notes'] = notes
+            break
+
+    # Save changes
+    save_colony(current_colony, current_colony.name)
+
+    # Redirect back to cages view
+    return redirect(url_for('view_cages'))
+
 if __name__ == '__main__':
     print("Starting Animal Colony Manager...")
     
