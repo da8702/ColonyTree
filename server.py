@@ -800,6 +800,21 @@ def add_cage():
             else:
                 data = request.form
             
+            # First, check if user wants to link an existing cage as a litter
+            existing_id = data.get('existing_cage_id')
+            breeder_id = data.get('breeder_cage_id')
+            if existing_id:
+                bc = next((b for b in current_colony.breeder_cages if b['cage_id'] == breeder_id), None)
+                if bc is not None and existing_id not in bc.get('litters', []):
+                    bc['litters'].append(existing_id)
+                    save_colony(current_colony, current_colony.name)
+                    print(f"Linked existing cage {existing_id} as litter to breeder {breeder_id}")
+                if is_api:
+                    return jsonify({'success': True, 'message': f'Linked existing cage {existing_id} to breeder {breeder_id}'})
+                else:
+                    return redirect(url_for('view_cages'))
+            
+            # Parse fields for creating a new cage
             cage_id = data.get('cage_id')
             num_animals = int(data.get('num_animals', 1))
             sex = data.get('sex')
@@ -811,7 +826,6 @@ def add_cage():
             mother_id = data.get('mother_id')
             father_id = data.get('father_id')
             notes = data.get('notes')
-            breeder_id = data.get('breeder_cage_id')  # for litters
             
             # Get parent objects
             mother = current_colony.get_animal(mother_id) if mother_id else None
@@ -893,7 +907,14 @@ def delete_cage():
             # Remove the animal from the colony
             current_colony.animals.remove(animal)
         
-        # Save the colony after deletion
+        # Remove litter reference from breeder cages
+        for bc in current_colony.breeder_cages:
+            # bc['litters'] exists by load/create
+            if cage_id in bc.get('litters', []):
+                bc['litters'].remove(cage_id)
+                print(f"Removed litter {cage_id} from breeder cage {bc['cage_id']}")
+        
+        # Save the colony after deletion and litters update
         save_colony(current_colony, current_colony.name)
         print(f"Deleted cage {cage_id} with {len(animals_to_delete)} animals from colony {current_colony.name}")
         
