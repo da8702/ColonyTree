@@ -161,6 +161,10 @@ def load_colony(filename):
     
     # Load breeder cages if present
     colony.breeder_cages = data.get('breeder_cages', [])
+    # Ensure each breeder cage dict has a litters list
+    for bc in colony.breeder_cages:
+        if 'litters' not in bc:
+            bc['litters'] = []
     return colony
 
 @app.before_request
@@ -785,8 +789,14 @@ def add_cage():
         return redirect(url_for('list_colonies'))
     
     if request.method == 'POST':
+        # Determine if this is an API (JSON) call or a form submission
+        is_api = request.is_json
         try:
-            data = request.get_json()
+            if is_api:
+                data = request.get_json()
+            else:
+                data = request.form
+            
             cage_id = data.get('cage_id')
             num_animals = int(data.get('num_animals', 1))
             sex = data.get('sex')
@@ -798,69 +808,46 @@ def add_cage():
             mother_id = data.get('mother_id')
             father_id = data.get('father_id')
             notes = data.get('notes')
+            breeder_id = data.get('breeder_cage_id')  # for litters
             
-            # Get parent objects if IDs provided
-            mother = None
-            if mother_id:
-                mother = current_colony.get_animal(mother_id)
-                
-            father = None
-            if father_id:
-                father = current_colony.get_animal(father_id)
+            # Get parent objects
+            mother = current_colony.get_animal(mother_id) if mother_id else None
+            father = current_colony.get_animal(father_id) if father_id else None
             
-            # Create the specified number of animals
+            # Create animals in the new cage
             created_animals = []
             for i in range(1, num_animals + 1):
-                # Generate animal ID based on cage ID
                 animal_id = f"{cage_id}_{i}"
-                
-                # Check if an animal with this ID already exists
                 if current_colony.get_animal(animal_id):
-                    return jsonify({
-                        'success': False, 
-                        'error': f'Animal with ID {animal_id} already exists'
-                    })
-                
-                # Create the animal
-                animal = Animal(
-                    animal_id=animal_id,
-                    sex=sex,
-                    genotype=genotype,
-                    dob=dob,
-                    mother=mother,
-                    father=father,
-                    notes=notes,
-                    cage_id=cage_id,
-                    date_weaned=date_weaned
-                )
-                
+                    raise ValueError(f"Animal with ID {animal_id} already exists")
+                animal = Animal(animal_id, sex, genotype, dob, mother, father, notes, cage_id, date_weaned)
                 current_colony.add_animal(animal)
                 created_animals.append(animal_id)
             
-            # Save the colony after adding the animals
-            try:
-                save_colony(current_colony, current_colony.name)
-                print(f"Saved colony after adding cage {cage_id} with {num_animals} animals")
-                
-                # Return success with list of created animal IDs
-                return jsonify({
-                    'success': True,
-                    'message': f'Created {num_animals} animals in cage {cage_id}',
-                    'animals': created_animals
-                })
-            except Exception as save_error:
-                print(f"Error saving colony: {str(save_error)}")
-                return jsonify({
-                    'success': False,
-                    'error': f'Error saving colony: {str(save_error)}'
-                })
+            # Save after creating the cage
+            save_colony(current_colony, current_colony.name)
+            print(f"Saved colony after adding cage {cage_id} with {num_animals} animals")
             
+            # If this is a litter addition, update the breeder cage entry
+            if breeder_id:
+                bc = next((bc for bc in current_colony.breeder_cages if bc['cage_id'] == breeder_id), None)
+                if bc is not None:
+                    bc['litters'].append(cage_id)
+                    save_colony(current_colony, current_colony.name)
+                    print(f"Added litter {cage_id} to breeder cage {breeder_id}")
+            
+            # Return based on request type
+            if is_api:
+                return jsonify({'success': True, 'message': f'Created {num_animals} animals in cage {cage_id}', 'animals': created_animals})
+            else:
+                return redirect(url_for('view_cages'))
         except Exception as e:
-            print(f"Error adding cage: {str(e)}")
-            return jsonify({
-                'success': False,
-                'error': str(e)
-            })
+            print(f"Error adding cage: {e}")
+            if is_api:
+                return jsonify({'success': False, 'error': str(e)})
+            else:
+                flash(str(e), 'error')
+                return redirect(url_for('view_cages'))
     
     return render_template('add_cage.html', colony=current_colony)
 
@@ -1125,7 +1112,8 @@ def add_breeder_cage():
                 'mother_id': mother_id,
                 'father_id': father_id,
                 'date_mated': date_mated,
-                'notes': notes
+                'notes': notes,
+                'litters': []
             }
             current_colony.breeder_cages.append(breeder_entry)
 
@@ -1187,6 +1175,37 @@ def edit_breeder_cage():
     save_colony(current_colony, current_colony.name)
 
     # Redirect back to cages view
+    return redirect(url_for('view_cages'))
+
+# Add delete breeder cage route
+@app.route('/delete_breeder_cage', methods=['POST'])
+def delete_breeder_cage():
+    """Delete a breeder cage entry and unassign parents"""
+    global current_colony
+    if not current_colony:
+        return redirect(url_for('list_colonies'))
+    cage_id = request.form.get('cage_id')
+    if not cage_id:
+        print("No breeder cage_id provided for deletion")
+        return redirect(url_for('view_cages'))
+    try:
+        bc_to_delete = next((bc for bc in current_colony.breeder_cages if bc['cage_id'] == cage_id), None)
+        if bc_to_delete:
+            current_colony.breeder_cages.remove(bc_to_delete)
+            # Unassign parents from this breeder cage
+            mother = current_colony.get_animal(bc_to_delete['mother_id'])
+            father = current_colony.get_animal(bc_to_delete['father_id'])
+            if mother:
+                mother.cage_id = None
+            if father:
+                father.cage_id = None
+            save_colony(current_colony, current_colony.name)
+            print(f"Deleted breeder cage {cage_id}")
+        else:
+            print(f"Breeder cage {cage_id} not found")
+    except Exception as e:
+        print(f"Error deleting breeder cage: {e}")
+        traceback.print_exc()
     return redirect(url_for('view_cages'))
 
 if __name__ == '__main__':

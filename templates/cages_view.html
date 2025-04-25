@@ -22,7 +22,7 @@
     {% if colony.breeder_cages %}
     <div class="table-responsive mb-4">
         <table class="table table-striped">
-            <thead><tr><th>Cage ID</th><th>Mother</th><th>Father</th><th>Date Mated</th></tr></thead>
+            <thead><tr><th>Cage ID</th><th>Mother</th><th>Father</th><th>Date Mated</th><th>Litters</th><th>Actions</th></tr></thead>
             <tbody>
             {% for bc in colony.breeder_cages %}
                 <tr>
@@ -35,6 +35,11 @@
                     <td>{{ bc.mother_id }}</td>
                     <td>{{ bc.father_id }}</td>
                     <td>{{ bc.date_mated or '-' }}</td>
+                    <td>{{ bc.litters | join(', ') }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#addLitterModal{{ safe_id }}">Add Litter</button>
+                        <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteBreederCageModal{{ safe_id }}">Delete</button>
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>
@@ -98,6 +103,93 @@
             </div>
         </div>
     </div>
+    {% endfor %}
+
+    {# Delete Breeder Cage Modals #}
+    {% for bc in colony.breeder_cages %}
+        {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
+        <div class="modal fade" id="deleteBreederCageModal{{ safe_id }}" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Confirm Delete Breeder Cage</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Are you sure you want to delete breeder cage {{ bc.cage_id }}?</p>
+                        <p class="text-danger">This will unassign the parents. This action cannot be undone.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <form action="{{ url_for('delete_breeder_cage') }}" method="post" style="display:inline;">
+                            <input type="hidden" name="cage_id" value="{{ bc.cage_id }}">
+                            <button type="submit" class="btn btn-danger">Delete Breeder Cage</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+
+    {# Add Litter Modals #}
+    {% for bc in colony.breeder_cages %}
+        {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
+        <div class="modal fade" id="addLitterModal{{ safe_id }}" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add Litter for Breeder Cage {{ bc.cage_id }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="addLitterForm{{ safe_id }}" method="POST" action="{{ url_for('add_cage') }}">
+                            <input type="hidden" name="breeder_cage_id" value="{{ bc.cage_id }}">
+                            <div class="mb-3">
+                                <label class="form-label">Cage ID</label>
+                                <input type="text" class="form-control" name="cage_id" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Number of Animals</label>
+                                <input type="number" class="form-control" name="num_animals" value="1" min="1" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Sex</label>
+                                <select class="form-select" name="sex" required>
+                                    <option value="M">Male</option>
+                                    <option value="F">Female</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Genotype</label>
+                                <select class="form-select" name="genotype" required>
+                                    <option>Homo (+/+)</option>
+                                    <option>Het (+/-)</option>
+                                    <option>WT (-/-)</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Date of Birth</label>
+                                <input type="date" class="form-control" name="dob" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Date Weaned</label>
+                                <input type="date" class="form-control" name="date_weaned">
+                            </div>
+                            <input type="hidden" name="mother_id" value="{{ bc.mother_id }}">
+                            <input type="hidden" name="father_id" value="{{ bc.father_id }}">
+                            <div class="mb-3">
+                                <label class="form-label">Notes</label>
+                                <textarea class="form-control" name="notes" rows="3"></textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" form="addLitterForm{{ safe_id }}" class="btn btn-success">Add Litter</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     {% endfor %}
 
     <hr />
