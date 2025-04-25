@@ -411,6 +411,9 @@ def get_colony_data(data_type=None):
                 unique_cages[animal.cage_id]['animals'].append(animal.animal_id)
         
         data['cages'] = list(unique_cages.values())
+        # Include breeder cages and their litters for cage visualization
+        data['breeder_cages'] = current_colony.breeder_cages
+        return jsonify(data)
     
     return jsonify(data)
 

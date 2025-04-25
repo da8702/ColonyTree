@@ -22,7 +22,7 @@
     {% if colony.breeder_cages %}
     <div class="table-responsive mb-4">
         <table class="table table-striped">
-            <thead><tr><th>Cage ID</th><th>Mother</th><th>Father</th><th>Date Mated</th><th>Litters</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Cage ID</th><th>Genotype</th><th>Mother</th><th>Father</th><th>Date Mated</th><th>Litters</th><th>Actions</th></tr></thead>
             <tbody>
             {% for bc in colony.breeder_cages %}
                 <tr>
@@ -31,6 +31,17 @@
                         <a href="#" class="text-decoration-none" data-bs-toggle="modal" data-bs-target="#editBreederCageModal{{ safe_id }}">
                             {{ bc.cage_id }}
                         </a>
+                    </td>
+                    <td>
+                        {% set m = colony.animals | selectattr('animal_id', 'equalto', bc.mother_id) | list | first if bc.mother_id else None %}
+                        {% set f = colony.animals | selectattr('animal_id', 'equalto', bc.father_id) | list | first if bc.father_id else None %}
+                        {% if m and f and m.genotype == 'Homo (+/+)' and f.genotype == 'Homo (+/+)' %}
+                            Homo (+/+)
+                        {% elif m and f and ((m.genotype == 'Homo (+/+)' and f.genotype == 'WT (-/-)') or (f.genotype == 'Homo (+/+)' and m.genotype == 'WT (-/-)')) %}
+                            Het (+/-)
+                        {% else %}
+                            Other
+                        {% endif %}
                     </td>
                     <td>{{ bc.mother_id }}</td>
                     <td>{{ bc.father_id }}</td>

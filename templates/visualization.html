@@ -123,6 +123,27 @@ document.addEventListener('DOMContentLoaded', function() {
                     'line-style': 'dashed',
                     'line-color': '#999999'
                 }
+            },
+            {
+                selector: 'node[breeder="true"][genotype="Homo (+/+)"]',
+                style: {
+                    'background-color': 'purple',
+                    'color': '#ffffff'
+                }
+            },
+            {
+                selector: 'node[breeder="true"][genotype="Het (+/-)"]',
+                style: {
+                    'background-color': 'orange',
+                    'color': '#ffffff'
+                }
+            },
+            {
+                selector: 'node[breeder="true"][genotype="Other"]',
+                style: {
+                    'background-color': 'yellow',
+                    'color': '#000000'
+                }
             }
         ]
     });
@@ -295,8 +316,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 customAnimalLayout();
             } 
             else if (visType === 'cages') {
-                // Create cage nodes
+                // Create cage nodes with breeder genotype overrides
                 if (data.cages && data.cages.length > 0) {
+                    const breederIds = data.breeder_cages.map(bc => bc.cage_id);
                     data.cages.forEach(cage => {
                         // Determine predominant sex and genotype for the cage
                         let maleCount = 0;
@@ -333,14 +355,36 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                         }
                         
+                        // Compute breeder genotype for breeder cages
+                        const isBreeder = breederIds.includes(cage.cage_id);
+                        let genotypeText = predominantGenotype;
+                        if (isBreeder) {
+                            const bcEntry = data.breeder_cages.find(bc => bc.cage_id === cage.cage_id);
+                            if (bcEntry) {
+                                const mother = data.animals.find(a => a.animal_id === bcEntry.mother_id);
+                                const father = data.animals.find(a => a.animal_id === bcEntry.father_id);
+                                if (mother && father) {
+                                    if (mother.genotype === 'Homo (+/+)' && father.genotype === 'Homo (+/+)') {
+                                        genotypeText = 'Homo (+/+)';
+                                    } else if ((mother.genotype === 'Homo (+/+)' && father.genotype === 'WT (-/-)')
+                                            || (father.genotype === 'Homo (+/+)' && mother.genotype === 'WT (-/-)')) {
+                                        genotypeText = 'Het (+/-)';
+                                    } else {
+                                        genotypeText = 'Other';
+                                    }
+                                }
+                            }
+                        }
+                        
                         // Add cage node with properties
                         cy.add({
                             data: {
                                 id: `cage_${cage.cage_id}`,
-                                label: `${cage.cage_id}\n${predominantGenotype}\n${cage.animals.length}`,
+                                label: `${cage.cage_id}\n${genotypeText}\n${cage.animals.length}`,
                                 node_type: 'cage',
                                 sex: cageSex,
-                                genotype: predominantGenotype,
+                                genotype: genotypeText,
+                                breeder: isBreeder.toString(),
                                 width: '120px',
                                 height: '60px'
                             }
@@ -348,9 +392,27 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                     
                     // Only cages are displayed, no animal nodes
-                    
-                    // Run cage tree layout
-                    customCageLayout();
+                    // Add breeder-to-litter arrows (use same arrow style as animal parent edges)
+                    data.breeder_cages.forEach(bc => {
+                        bc.litters.forEach(lit => {
+                            cy.add({
+                                data: {
+                                    source: `cage_${bc.cage_id}`,
+                                    target: `cage_${lit}`,
+                                    edge_type: 'parent'
+                                }
+                            });
+                        });
+                    });
+                    // Apply breadthfirst layout (hierarchical like animal tree)
+                    const roots = data.breeder_cages.map(bc => `cage_${bc.cage_id}`);
+                    cy.layout({
+                        name: 'breadthfirst',
+                        directed: true,
+                        roots: roots,
+                        padding: 50,
+                        spacingFactor: 1.5
+                    }).run();
                 }
                 else {
                     // If no cages, display a message
