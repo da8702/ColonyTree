@@ -150,99 +150,71 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Custom layout function for animal tree
     function customAnimalLayout() {
-        console.log('Running customAnimalLayout');
+        // Vertical spacing between generations
         const VERTICAL_SPACING = 200;
-        const HORIZONTAL_SPACING = 200;
-        const NODE_WIDTH = 100;
-        const NODE_HEIGHT = 40;
-
-        // Get all nodes and edges
-        const nodes = cy.nodes().filter(node => !node.data('node_type') || node.data('node_type') !== 'cage');
-        const edges = cy.edges().filter(edge => edge.data('edge_type') === 'parent');
-
-        // Find root nodes (nodes with no parents)
-        const rootNodes = nodes.filter(node => {
-            return !edges.some(edge => edge.target().id() === node.id());
-        });
-
-        // Group nodes by generation
-        const generations = new Map();
-        const processedNodes = new Set();
-
-        // Helper function to get generation of a node
-        function getGeneration(node) {
-            if (processedNodes.has(node.id())) {
-                return generations.get(node.id());
-            }
-
-            const parentEdges = edges.filter(edge => edge.target().id() === node.id());
-            if (parentEdges.length === 0) {
-                generations.set(node.id(), 0);
-                processedNodes.add(node.id());
-                return 0;
-            }
-
-            const parentGenerations = parentEdges.map(edge => 
-                getGeneration(edge.source())
-            );
-            const generation = Math.max(...parentGenerations) + 1;
-            generations.set(node.id(), generation);
-            processedNodes.add(node.id());
-            return generation;
+        // Determine dynamic horizontal spacing to avoid overlaps
+        const containerWidth = cy.width() || cy.container().clientWidth;
+        const MARGIN = 100;  // total side margins
+        // Collect animal nodes and parent edges
+        const nodes = cy.nodes().filter(n => !n.data('node_type') || n.data('node_type') !== 'cage');
+        const parentEdges = cy.edges().filter(e => e.data('edge_type') === 'parent');
+        // Compute generation for each node
+        const generations = {};
+        function getGen(node) {
+            if (generations[node.id()] !== undefined) return generations[node.id()];
+            const inE = parentEdges.filter(e => e.target().id() === node.id());
+            if (inE.length === 0) return (generations[node.id()] = 0);
+            const pg = inE.map(e => getGen(e.source()));
+            return (generations[node.id()] = Math.max(...pg) + 1);
         }
-
-        // Calculate generations for all nodes
-        nodes.forEach(node => getGeneration(node));
-        console.log('CustomAnimalLayout - generations map:', Array.from(generations.entries()));
-
-        // Group nodes by generation
-        const nodesByGeneration = new Map();
-        nodes.forEach(node => {
-            const gen = generations.get(node.id());
-            if (!nodesByGeneration.has(gen)) {
-                nodesByGeneration.set(gen, []);
+        nodes.forEach(n => getGen(n));
+        // Group children by parent pair
+        const childrenByPair = {};
+        nodes.forEach(n => {
+            const mom = n.data('mother_id') || '';
+            const dad = n.data('father_id') || '';
+            const key = mom + '|' + dad;
+            (childrenByPair[key] = childrenByPair[key] || []).push(n.id());
+        });
+        // Layout gen=0: parents side-by-side
+        // Compute couples and solo founders as placeholders
+        const gen0 = nodes.filter(n => generations[n.id()] === 0).map(n => n.id());
+        const couples = Object.keys(childrenByPair)
+            .map(k => {const [m, d] = k.split('|'); return {key: k, m, d};})
+            .filter(c => c.m && c.d && gen0.includes(c.m) && gen0.includes(c.d));
+        const taken = couples.flatMap(c => [c.m, c.d]);
+        const singles = gen0.filter(id => !taken.includes(id));
+        const items = [...couples, ...singles.map(id => ({single: id}))];
+        // Compute dynamic horizontal spacing based on number of placeholders and max children count
+        const maxInRow0 = items.length;
+        const maxKids = Math.max(...Object.values(childrenByPair).map(arr => arr.length), 1);
+        const slots = Math.max(maxInRow0, maxKids);
+        const HORIZONTAL_SPACING = (containerWidth - MARGIN) / slots;
+        const HALF_SPACING = HORIZONTAL_SPACING / 2;
+        let x0 = -((items.length - 1) * HORIZONTAL_SPACING) / 2;
+        const centers = {};
+        items.forEach(it => {
+            if (it.single) {
+                cy.getElementById(it.single).position({x: x0, y: 0});
+            } else {
+                cy.getElementById(it.m).position({x: x0 - HALF_SPACING, y: 0});
+                cy.getElementById(it.d).position({x: x0 + HALF_SPACING, y: 0});
+                centers[it.key] = x0;
             }
-            nodesByGeneration.get(gen).push(node);
+            x0 += HORIZONTAL_SPACING;
         });
-
-        // Position nodes by generation
-        let currentY = 0;
-        const sortedGens = Array.from(nodesByGeneration.keys()).map(Number).sort((a, b) => a - b);
-        console.log('CustomAnimalLayout - sorted generations:', sortedGens);
-        sortedGens.forEach(gen => {
-            console.log(`Positioning generation ${gen} at y=${currentY}`);
-            const genNodes = nodesByGeneration.get(gen);
-            // Sort nodes in this generation by their parents' positions
-            genNodes.sort((a, b) => {
-                const aParents = edges.filter(edge => edge.target().id() === a.id())
-                    .map(edge => edge.source().position('x'));
-                const bParents = edges.filter(edge => edge.target().id() === b.id())
-                    .map(edge => edge.source().position('x'));
-                
-                if (aParents.length === 0 && bParents.length === 0) return 0;
-                if (aParents.length === 0) return -1;
-                if (bParents.length === 0) return 1;
-                
-                return Math.min(...aParents) - Math.min(...bParents);
-            });
-
-            // Position nodes in this generation
-            const totalWidth = (genNodes.length - 1) * HORIZONTAL_SPACING;
-            let currentX = -totalWidth / 2;
-
-            genNodes.forEach(node => {
-                console.log(`  Node ${node.id()} -> x=${currentX}, y=${currentY}`);
-                node.position({
-                    x: currentX,
-                    y: currentY
+        // Layout gen=1: children under each parent pair
+        const y1 = VERTICAL_SPACING;
+        couples.forEach(c => {
+            const kids = childrenByPair[c.key] || [];
+            kids.forEach((kid, idx) => {
+                cy.getElementById(kid).position({
+                    x: centers[c.key] + (idx - (kids.length-1)/2) * HORIZONTAL_SPACING,
+                    y: y1
                 });
-                currentX += HORIZONTAL_SPACING;
             });
-
-            currentY += VERTICAL_SPACING;
         });
-
-        // Center the graph
+        // Center entire graph
         cy.center();
     }
 
@@ -292,7 +264,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             id: animal.animal_id,
                             label: `${animal.animal_id}\n${animal.genotype}`,
                             sex: animal.sex,
-                            genotype: animal.genotype
+                            genotype: animal.genotype,
+                            mother_id: animal.mother_id,
+                            father_id: animal.father_id
                         }
                     });
                 });
