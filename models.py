@@ -16,6 +16,7 @@ class Animal:
         self.children: List["Animal"] = []
         self.notes = notes
         self.cage_id = cage_id
+        self.old_cage_id: Optional[str] = None
         self.date_weaned = date_weaned
 
         # Automatically link to parents' children lists
@@ -38,7 +39,8 @@ class Animal:
             'father_id': self.father.animal_id if self.father else None,
             'notes': self.notes,
             'cage_id': self.cage_id,
-            'date_weaned': self.date_weaned.isoformat() if self.date_weaned else None
+            'date_weaned': self.date_weaned.isoformat() if self.date_weaned else None,
+            'old_cage_id': self.old_cage_id
         }
     
     @classmethod
@@ -51,7 +53,7 @@ class Animal:
             except (ValueError, TypeError):
                 date_weaned = None
                 
-        return cls(
+        animal = cls(
             animal_id=data['animal_id'],
             sex=data['sex'],
             genotype=data['genotype'],
@@ -60,6 +62,10 @@ class Animal:
             cage_id=data.get('cage_id'),
             date_weaned=date_weaned
         )
+        # Set old_cage_id if present
+        if data.get('old_cage_id'):
+            animal.old_cage_id = data['old_cage_id']
+        return animal
 
 class Colony:
     def __init__(self, name: str):

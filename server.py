@@ -413,6 +413,16 @@ def get_colony_data(data_type=None):
         data['cages'] = list(unique_cages.values())
         # Include breeder cages and their litters for cage visualization
         data['breeder_cages'] = current_colony.breeder_cages
+        # Include permanent cage transfer edges for any animal with old_cage_id
+        transfers = []
+        for animal in current_colony.animals:
+            if getattr(animal, 'old_cage_id', None):
+                transfers.append({
+                    'animal_id': animal.animal_id,
+                    'from': animal.old_cage_id,
+                    'to': animal.cage_id
+                })
+        data['transfers'] = transfers
         return jsonify(data)
     
     return jsonify(data)
@@ -578,7 +588,13 @@ def edit_animal(animal_id):
                 print(f"Animal with ID {new_id} already exists")
                 return jsonify({'success': False, 'error': f'Animal with ID {new_id} already exists'}), 400
             animal.animal_id = new_id
-            
+            # Update breeder cage parent references if they used the old ID
+            for bc in current_colony.breeder_cages:
+                if bc.get('mother_id') == original_id:
+                    bc['mother_id'] = new_id
+                if bc.get('father_id') == original_id:
+                    bc['father_id'] = new_id
+        
         # Update other properties
         if sex:
             animal.sex = sex
@@ -1133,38 +1149,79 @@ def add_breeder_cage():
     if request.method == 'POST':
         try:
             data = request.get_json()
+            # Core breeder cage info
             cage_id = data.get('cage_id')
-            mother_id = data.get('mother_id')
-            father_id = data.get('father_id')
             date_mated = data.get('date_mated')
             notes = data.get('notes')
-
-            # Validate required fields
-            if not cage_id or not mother_id or not father_id:
-                return jsonify({'success': False, 'error': 'Cage ID, mother ID, and father ID are required'}), 400
-
-            mother = current_colony.get_animal(mother_id)
-            father = current_colony.get_animal(father_id)
-            if not mother or mother.sex != 'F':
-                return jsonify({'success': False, 'error': f'Mother {mother_id} not found or not female'}), 400
-            if not father or father.sex != 'M':
-                return jsonify({'success': False, 'error': f'Father {father_id} not found or not male'}), 400
-
+            # Mother: existing or new
+            mid_exist = data.get('mother_id_existing')
+            mid_new = data.get('mother_id_new')
+            mgen = data.get('mother_genotype')
+            mdob_str = data.get('mother_dob')
+            # Father: existing or new
+            fid_exist = data.get('father_id_existing')
+            fid_new = data.get('father_id_new')
+            fgen = data.get('father_genotype')
+            fdob_str = data.get('father_dob')
+            
+            # Validate cage ID
+            if not cage_id:
+                return jsonify({'success': False, 'error': 'Cage ID is required'}), 400
+            # Process mother
+            mother = None
+            if mid_new:
+                # Create new mother
+                if current_colony.get_animal(mid_new):
+                    return jsonify({'success': False, 'error': f'Animal {mid_new} already exists'}), 400
+                try:
+                    mdob = datetime.fromisoformat(mdob_str).date()
+                except Exception:
+                    return jsonify({'success': False, 'error': 'Invalid mother DOB'}), 400
+                mother = Animal(mid_new, 'F', mgen, mdob, None, None, None, cage_id, None)
+                current_colony.add_animal(mother)
+            else:
+                # Use existing mother
+                if not mid_exist:
+                    return jsonify({'success': False, 'error': 'Mother ID is required'}), 400
+                mother = current_colony.get_animal(mid_exist)
+                if not mother or mother.sex != 'F':
+                    return jsonify({'success': False, 'error': f'Mother {mid_exist} not found or not female'}), 400
+                # Record transfer
+                mother.old_cage_id = mother.cage_id
+                mother.cage_id = cage_id
+            
+            # Process father
+            father = None
+            if fid_new:
+                if current_colony.get_animal(fid_new):
+                    return jsonify({'success': False, 'error': f'Animal {fid_new} already exists'}), 400
+                try:
+                    fdob = datetime.fromisoformat(fdob_str).date()
+                except Exception:
+                    return jsonify({'success': False, 'error': 'Invalid father DOB'}), 400
+                father = Animal(fid_new, 'M', fgen, fdob, None, None, None, cage_id, None)
+                current_colony.add_animal(father)
+            else:
+                if not fid_exist:
+                    return jsonify({'success': False, 'error': 'Father ID is required'}), 400
+                father = current_colony.get_animal(fid_exist)
+                if not father or father.sex != 'M':
+                    return jsonify({'success': False, 'error': f'Father {fid_exist} not found or not male'}), 400
+                father.old_cage_id = father.cage_id
+                father.cage_id = cage_id
+            
             # Append breeder cage entry
             breeder_entry = {
                 'cage_id': cage_id,
-                'mother_id': mother_id,
-                'father_id': father_id,
+                'mother_id': mother.animal_id,
+                'father_id': father.animal_id,
                 'date_mated': date_mated,
                 'notes': notes,
                 'litters': []
             }
             current_colony.breeder_cages.append(breeder_entry)
 
-            # Update parents' cage assignment
-            mother.cage_id = cage_id
-            father.cage_id = cage_id
-
+            # Save colony
             save_colony(current_colony, current_colony.name)
             return jsonify({'success': True})
         except Exception as e:

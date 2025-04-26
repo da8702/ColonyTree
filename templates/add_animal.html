@@ -66,25 +66,21 @@
             </div>
 
             <div class="mb-3">
-                <label for="motherId" class="form-label">Mother ID (Optional)</label>
-                <select class="form-select" id="motherId" name="mother_id">
+                <label for="fatherId" class="form-label">Father ID (Optional)</label>
+                <select class="form-select" id="fatherId" name="father_id">
                     <option value="">None</option>
-                    {% for animal in colony.animals %}
-                    {% if animal.sex == 'F' %}
+                    {% for animal in colony.animals|selectattr('sex','equalto','M')|sort(attribute='animal_id') %}
                     <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
-                    {% endif %}
                     {% endfor %}
                 </select>
             </div>
 
             <div class="mb-3">
-                <label for="fatherId" class="form-label">Father ID (Optional)</label>
-                <select class="form-select" id="fatherId" name="father_id">
+                <label for="motherId" class="form-label">Mother ID (Optional)</label>
+                <select class="form-select" id="motherId" name="mother_id">
                     <option value="">None</option>
-                    {% for animal in colony.animals %}
-                    {% if animal.sex == 'M' %}
+                    {% for animal in colony.animals|selectattr('sex','equalto','F')|sort(attribute='animal_id') %}
                     <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
-                    {% endif %}
                     {% endfor %}
                 </select>
             </div>

@@ -37,8 +37,8 @@
                             <th>Age</th>
                             <th>Date Weaned</th>
                             <th>Cage ID</th>
-                            <th>Mother</th>
                             <th>Father</th>
+                            <th>Mother</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -68,8 +68,8 @@
                             <td class="animal-age" data-dob="{{ animal.dob.strftime('%Y-%m-%d') }}">Loading...</td>
                             <td>{{ animal.date_weaned.strftime('%Y-%m-%d') if animal.date_weaned else '-' }}</td>
                             <td>{{ animal.cage_id }}</td>
-                            <td>{{ animal.mother.animal_id if animal.mother else '-' }}</td>
                             <td>{{ animal.father.animal_id if animal.father else '-' }}</td>
+                            <td>{{ animal.mother.animal_id if animal.mother else '-' }}</td>
                             <td>
                                 <button type="button" 
                                         class="btn btn-sm btn-danger" 
@@ -121,30 +121,26 @@
                                                 <input type="date" class="form-control" id="editDateWeaned{{ animal.animal_id }}" name="date_weaned" value="{{ animal.date_weaned.strftime('%Y-%m-%d') if animal.date_weaned else '' }}">
                                             </div>
                                             <div class="form-group">
-                                                <label for="editMother{{ animal.animal_id }}">Mother</label>
-                                                <select class="form-control" id="editMother{{ animal.animal_id }}" name="mother_id">
+                                                <label for="editFather{{ animal.animal_id }}">Father</label>
+                                                <select class="form-control" id="editFather{{ animal.animal_id }}" name="father_id">
                                                     <option value="">None</option>
-                                                    {% for potential_mother in colony.animals %}
-                                                        {% if potential_mother.sex == 'F' and potential_mother.animal_id != animal.animal_id %}
-                                                            <option value="{{ potential_mother.animal_id }}" 
-                                                                {% if animal.mother and animal.mother.animal_id == potential_mother.animal_id %}selected{% endif %}>
-                                                                {{ potential_mother.animal_id }}
-                                                            </option>
-                                                        {% endif %}
+                                                    {% for potential_father in colony.animals|selectattr('sex','equalto','M')|rejectattr('animal_id','equalto',animal.animal_id)|sort(attribute='animal_id') %}
+                                                        <option value="{{ potential_father.animal_id }}" 
+                                                            {% if animal.father and animal.father.animal_id == potential_father.animal_id %}selected{% endif %}>
+                                                            {{ potential_father.animal_id }}
+                                                        </option>
                                                     {% endfor %}
                                                 </select>
                                             </div>
                                             <div class="form-group">
-                                                <label for="editFather{{ animal.animal_id }}">Father</label>
-                                                <select class="form-control" id="editFather{{ animal.animal_id }}" name="father_id">
+                                                <label for="editMother{{ animal.animal_id }}">Mother</label>
+                                                <select class="form-control" id="editMother{{ animal.animal_id }}" name="mother_id">
                                                     <option value="">None</option>
-                                                    {% for potential_father in colony.animals %}
-                                                        {% if potential_father.sex == 'M' and potential_father.animal_id != animal.animal_id %}
-                                                            <option value="{{ potential_father.animal_id }}"
-                                                                {% if animal.father and animal.father.animal_id == potential_father.animal_id %}selected{% endif %}>
-                                                                {{ potential_father.animal_id }}
-                                                            </option>
-                                                        {% endif %}
+                                                    {% for potential_mother in colony.animals|selectattr('sex','equalto','F')|rejectattr('animal_id','equalto',animal.animal_id)|sort(attribute='animal_id') %}
+                                                        <option value="{{ potential_mother.animal_id }}" 
+                                                            {% if animal.mother and animal.mother.animal_id == potential_mother.animal_id %}selected{% endif %}>
+                                                            {{ potential_mother.animal_id }}
+                                                        </option>
                                                     {% endfor %}
                                                 </select>
                                             </div>

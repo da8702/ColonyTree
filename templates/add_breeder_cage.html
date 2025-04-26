@@ -11,23 +11,65 @@
                 <label for="cageId" class="form-label">Cage ID</label>
                 <input type="text" class="form-control" id="cageId" name="cage_id" required>
             </div>
+            <!-- Father selection: existing or new -->
             <div class="mb-3">
-                <label for="motherId" class="form-label">Mother ID</label>
-                <select class="form-select" id="motherId" name="mother_id" required>
-                    <option value="">Select Mother</option>
-                    {% for animal in colony.get_females() %}
-                    <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
+                <label for="fatherSelect" class="form-label">Father</label>
+                <select class="form-select" id="fatherSelect" name="father_id_existing">
+                    <option value="">Select Father</option>
+                    <option value="new">Add New Animal</option>
+                    {% for animal in colony.get_males()|sort(attribute='animal_id') %}
+                        <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
                     {% endfor %}
                 </select>
             </div>
+            <div class="mb-3 father-new-group" style="display:none;">
+                <label class="form-label">New Father ID</label>
+                <input type="text" class="form-control" name="father_id_new" placeholder="Enter new father ID">
+                <label class="form-label mt-2">Genotype</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="father_genotype" value="Homo (+/+)" id="fatherGenHomo">
+                    <label class="form-check-label" for="fatherGenHomo">Homo (+/+)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="father_genotype" value="Het (+/-)" id="fatherGenHet">
+                    <label class="form-check-label" for="fatherGenHet">Het (+/-)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="father_genotype" value="WT (-/-)" id="fatherGenWT">
+                    <label class="form-check-label" for="fatherGenWT">WT (-/-)</label>
+                </div>
+                <label class="form-label mt-2">Date of Birth</label>
+                <input type="date" class="form-control" name="father_dob">
+            </div>
+            <!-- Mother selection: existing or new -->
             <div class="mb-3">
-                <label for="fatherId" class="form-label">Father ID</label>
-                <select class="form-select" id="fatherId" name="father_id" required>
-                    <option value="">Select Father</option>
-                    {% for animal in colony.get_males() %}
-                    <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
+                <label for="motherSelect" class="form-label">Mother</label>
+                <select class="form-select" id="motherSelect" name="mother_id_existing">
+                    <option value="">Select Mother</option>
+                    <option value="new">Add New Animal</option>
+                    {% for animal in colony.get_females()|sort(attribute='animal_id') %}
+                        <option value="{{ animal.animal_id }}">{{ animal.animal_id }}</option>
                     {% endfor %}
                 </select>
+            </div>
+            <div class="mb-3 mother-new-group" style="display:none;">
+                <label class="form-label">New Mother ID</label>
+                <input type="text" class="form-control" name="mother_id_new" placeholder="Enter new mother ID">
+                <label class="form-label mt-2">Genotype</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="mother_genotype" value="Homo (+/+)" id="motherGenHomo">
+                    <label class="form-check-label" for="motherGenHomo">Homo (+/+)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="mother_genotype" value="Het (+/-)" id="motherGenHet">
+                    <label class="form-check-label" for="motherGenHet">Het (+/-)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="mother_genotype" value="WT (-/-)" id="motherGenWT">
+                    <label class="form-check-label" for="motherGenWT">WT (-/-)</label>
+                </div>
+                <label class="form-label mt-2">Date of Birth</label>
+                <input type="date" class="form-control" name="mother_dob">
             </div>
             <div class="mb-3">
                 <label for="dateMated" class="form-label">Date Mated</label>
@@ -45,44 +87,98 @@
 
 {% block scripts %}
 <script>
-document.getElementById('addBreederCageForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const cageId = document.getElementById('cageId').value;
-    const mother = document.getElementById('motherId').value;
-    const father = document.getElementById('fatherId').value;
-    const dateMated = document.getElementById('dateMated').value;
-    const notes = document.getElementById('notes').value;
-    if (!cageId || !mother || !father) {
-        alert('Please fill in all required fields');
-        return;
+document.addEventListener('DOMContentLoaded', function() {
+    const motherSelect = document.getElementById('motherSelect');
+    const motherNewGroup = document.querySelector('.mother-new-group');
+    const fatherSelect = document.getElementById('fatherSelect');
+    const fatherNewGroup = document.querySelector('.father-new-group');
+
+    function updateMotherGroup() {
+        motherNewGroup.style.display = motherSelect.value === 'new' ? '' : 'none';
     }
-    const data = {
-        cage_id: cageId,
-        mother_id: mother,
-        father_id: father,
-        date_mated: dateMated || null,
-        notes: notes || null
-    };
-    console.log('Sending data:', data);
-    fetch('/add_breeder_cage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(res => {
-        if (!res.ok) return res.text().then(t => { throw new Error(t || res.statusText); });
-        return res.json();
-    })
-    .then(resp => {
-        if (resp.success) {
-            window.location.href = '/colony/cages';
+    function updateFatherGroup() {
+        fatherNewGroup.style.display = fatherSelect.value === 'new' ? '' : 'none';
+    }
+
+    motherSelect.addEventListener('change', updateMotherGroup);
+    fatherSelect.addEventListener('change', updateFatherGroup);
+
+    updateMotherGroup();
+    updateFatherGroup();
+
+    document.getElementById('addBreederCageForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const cageId = document.getElementById('cageId').value.trim();
+        if (!cageId) { alert('Please enter a Cage ID'); return; }
+
+        const payload = {
+            cage_id: cageId,
+            date_mated: document.getElementById('dateMated').value || null,
+            notes: document.getElementById('notes').value || null
+        };
+
+        // Father
+        if (fatherSelect.value === 'new') {
+            const fatherIdNew = document.querySelector('input[name="father_id_new"]').value.trim();
+            const fatherGen = document.querySelector('input[name="father_genotype"]:checked');
+            const fatherDob = document.querySelector('input[name="father_dob"]').value;
+            if (!fatherIdNew || !fatherGen || !fatherDob) {
+                alert('Please fill in all new father fields');
+                return;
+            }
+            payload.father_id_new = fatherIdNew;
+            payload.father_genotype = fatherGen.value;
+            payload.father_dob = fatherDob;
         } else {
-            alert('Error: ' + (resp.error || 'Failed to add breeder cage'));
+            if (!fatherSelect.value) {
+                alert('Please select a father');
+                return;
+            }
+            payload.father_id_existing = fatherSelect.value;
         }
-    })
-    .catch(err => {
-        console.error(err);
-        alert('Error adding breeder cage: ' + err.message);
+
+        // Mother
+        if (motherSelect.value === 'new') {
+            const motherIdNew = document.querySelector('input[name="mother_id_new"]').value.trim();
+            const motherGen = document.querySelector('input[name="mother_genotype"]:checked');
+            const motherDob = document.querySelector('input[name="mother_dob"]').value;
+            if (!motherIdNew || !motherGen || !motherDob) {
+                alert('Please fill in all new mother fields');
+                return;
+            }
+            payload.mother_id_new = motherIdNew;
+            payload.mother_genotype = motherGen.value;
+            payload.mother_dob = motherDob;
+        } else {
+            if (!motherSelect.value) {
+                alert('Please select a mother');
+                return;
+            }
+            payload.mother_id_existing = motherSelect.value;
+        }
+
+        fetch('/add_breeder_cage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (!res.ok) {
+                return res.text().then(text => { throw new Error(text || res.statusText); });
+            }
+            return res.json();
+        })
+        .then(data => {
+            if (data.success) {
+                window.location.href = '/colony/cages';
+            } else {
+                alert('Error: ' + (data.error || 'Failed to add breeder cage'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error: ' + err.message);
+        });
     });
 });
 </script>
