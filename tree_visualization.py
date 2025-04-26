@@ -78,12 +78,22 @@ def create_family_tree():
                 generations[child] = generations[parent] + 1
                 changed = True
     nx.set_node_attributes(G, generations, 'generation')
-    # Try Graphviz dot layout first, fallback to multipartite layered layout
-    try:
-        pos = graphviz_layout(G, prog='dot')
-    except Exception as e:
-        print(f"Graphviz layout failed ({e}), falling back to layered multipartite layout")
-        pos = nx.multipartite_layout(G, subset_key='generation', align='vertical')
+    # Custom layout: evenly space each generation on its own horizontal line
+    gen_nodes = {}
+    for node, gen in generations.items():
+        gen_nodes.setdefault(gen, []).append(node)
+    vertical_gap = 1.0  # vertical distance between generations
+    # Determine maximum generation to set axis range
+    max_gen = max(generations.values()) if generations else 0
+    pos = {}
+    for gen, nodes in gen_nodes.items():
+        count = len(nodes)
+        for idx, node in enumerate(nodes):
+            # Evenly space across x from 0 to 1
+            x = (idx / (count - 1)) if count > 1 else 0.5
+            # Negative y so generation 0 is at top (y=0), deeper gens below
+            y = -gen * vertical_gap
+            pos[node] = (x, y)
     
     # Create edges
     edge_x = []
@@ -125,19 +135,29 @@ def create_family_tree():
             line_width=2))
     
     # Create the figure
-    fig = go.Figure(data=[edge_trace, node_trace],
-                   layout=go.Layout(
-                       showlegend=False,
-                       hovermode='closest',
-                       margin=dict(b=20,l=5,r=5,t=40),
-                       title=f"Family Tree - {current_colony.name}",
-                       annotations=[dict(
-                           text="",
-                           showarrow=False,
-                           xref="paper", yref="paper",
-                           x=0, y=0)],
-                       xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                       yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
+    fig = go.Figure(
+        data=[edge_trace, node_trace],
+        layout=go.Layout(
+            showlegend=False,
+            hovermode='closest',
+            margin=dict(b=20, l=5, r=5, t=40),
+            title=f"Family Tree - {current_colony.name}",
+            annotations=[dict(
+                text="",
+                showarrow=False,
+                xref="paper", yref="paper",
+                x=0, y=0
+            )],
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(
+                showgrid=False,
+                zeroline=False,
+                showticklabels=False,
+                autorange=False,
+                range=[-max_gen * vertical_gap, 0]
+            )
+        )
+    )
     
     print("Figure created successfully")
     return fig

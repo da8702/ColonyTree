@@ -150,6 +150,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Custom layout function for animal tree
     function customAnimalLayout() {
+        console.log('Running customAnimalLayout');
         const VERTICAL_SPACING = 200;
         const HORIZONTAL_SPACING = 200;
         const NODE_WIDTH = 100;
@@ -192,6 +193,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Calculate generations for all nodes
         nodes.forEach(node => getGeneration(node));
+        console.log('CustomAnimalLayout - generations map:', Array.from(generations.entries()));
 
         // Group nodes by generation
         const nodesByGeneration = new Map();
@@ -205,7 +207,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Position nodes by generation
         let currentY = 0;
-        nodesByGeneration.forEach((genNodes, gen) => {
+        const sortedGens = Array.from(nodesByGeneration.keys()).map(Number).sort((a, b) => a - b);
+        console.log('CustomAnimalLayout - sorted generations:', sortedGens);
+        sortedGens.forEach(gen => {
+            console.log(`Positioning generation ${gen} at y=${currentY}`);
+            const genNodes = nodesByGeneration.get(gen);
             // Sort nodes in this generation by their parents' positions
             genNodes.sort((a, b) => {
                 const aParents = edges.filter(edge => edge.target().id() === a.id())
@@ -225,6 +231,7 @@ document.addEventListener('DOMContentLoaded', function() {
             let currentX = -totalWidth / 2;
 
             genNodes.forEach(node => {
+                console.log(`  Node ${node.id()} -> x=${currentX}, y=${currentY}`);
                 node.position({
                     x: currentX,
                     y: currentY
