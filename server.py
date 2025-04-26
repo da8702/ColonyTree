@@ -801,18 +801,38 @@ def add_cage():
                 data = request.form
             
             # First, check if user wants to link an existing cage as a litter
-            existing_id = data.get('existing_cage_id')
-            breeder_id = data.get('breeder_cage_id')
+            breeder_id = data.get('breeder_cage_id')  # for litters
+            existing_id = data.get('existing_cage_id')  # for adopting existing cage as litter
+            # If an existing cage is selected, link it as a litter and reparent its animals
             if existing_id:
-                bc = next((b for b in current_colony.breeder_cages if b['cage_id'] == breeder_id), None)
-                if bc is not None and existing_id not in bc.get('litters', []):
+                # Append to breeder's litters
+                bc = next((bc for bc in current_colony.breeder_cages if bc['cage_id'] == breeder_id), None)
+                if bc and existing_id not in bc['litters']:
                     bc['litters'].append(existing_id)
+                    print(f"Adopted existing cage {existing_id} as litter of breeder {breeder_id}")
+                    # Reparent animals in the existing cage to this breeder's parents
+                    mom = current_colony.get_animal(bc['mother_id'])
+                    dad = current_colony.get_animal(bc['father_id'])
+                    for animal in list(current_colony.animals):
+                        if animal.cage_id == existing_id:
+                            # Remove from old parents
+                            if animal.mother and animal in animal.mother.children:
+                                animal.mother.children.remove(animal)
+                            if animal.father and animal in animal.father.children:
+                                animal.father.children.remove(animal)
+                            # Assign new parents
+                            animal.mother = mom
+                            animal.father = dad
+                            if mom and animal not in mom.children:
+                                mom.children.append(animal)
+                            if dad and animal not in dad.children:
+                                dad.children.append(animal)
+                    # Save and return
                     save_colony(current_colony, current_colony.name)
-                    print(f"Linked existing cage {existing_id} as litter to breeder {breeder_id}")
-                if is_api:
-                    return jsonify({'success': True, 'message': f'Linked existing cage {existing_id} to breeder {breeder_id}'})
-                else:
-                    return redirect(url_for('view_cages'))
+                    if is_api:
+                        return jsonify({'success': True, 'message': f'Adopted cage {existing_id} as litter'} )
+                    else:
+                        return redirect(url_for('view_cages'))
             
             # Parse fields for creating a new cage
             cage_id = data.get('cage_id')
@@ -845,7 +865,7 @@ def add_cage():
             save_colony(current_colony, current_colony.name)
             print(f"Saved colony after adding cage {cage_id} with {num_animals} animals")
             
-            # If this is a litter addition, update the breeder cage entry
+            # Append new-cage litter to breeder if applicable (existing-id handled above)
             if breeder_id:
                 bc = next((bc for bc in current_colony.breeder_cages if bc['cage_id'] == breeder_id), None)
                 if bc is not None:

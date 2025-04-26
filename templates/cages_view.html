@@ -156,20 +156,21 @@
                         <form id="addLitterForm{{ safe_id }}" method="POST" action="{{ url_for('add_cage') }}">
                             <input type="hidden" name="breeder_cage_id" value="{{ bc.cage_id }}">
                             <div class="mb-3">
-                                <label class="form-label">Existing Cage (optional)</label>
-                                {% set existing_cages = colony.animals | map(attribute='cage_id') | unique | list %}
+                                <label class="form-label">Select Existing Cage (optional)</label>
                                 <select class="form-select" name="existing_cage_id">
-                                    <option value="">-- Create New Cage --</option>
-                                    {% for cid in existing_cages if cid and cid not in (colony.breeder_cages | map(attribute='cage_id') | list) %}
+                                    <option value="">-- Create new litter below --</option>
+                                    {% set all_cages = colony.animals | map(attribute='cage_id') | unique | list %}
+                                    {% for cid in all_cages %}
+                                        {% if cid != bc.cage_id %}
                                         <option value="{{ cid }}">{{ cid }}</option>
+                                        {% endif %}
                                     {% endfor %}
                                 </select>
-                                <small class="text-muted">Select an existing cage to link as a litter, or leave blank to create a new one.</small>
                             </div>
+                            <small class="text-muted">Pick an existing cage to link as a litter, or leave blank to create a new one.</small>
                             <div class="mb-3">
-                                <label class="form-label">New Cage ID (optional)</label>
+                                <label class="form-label">Cage ID</label>
                                 <input type="text" class="form-control" name="cage_id">
-                                <small class="text-muted">Fill this only if creating a new cage.</small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Number of Animals</label>
