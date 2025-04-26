@@ -22,7 +22,7 @@
     {% if colony.breeder_cages %}
     <div class="table-responsive mb-4">
         <table class="table table-striped">
-            <thead><tr><th>Cage ID</th><th>Genotype</th><th>Mother</th><th>Father</th><th>Date Mated</th><th>Litters</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Cage ID</th><th>Genotype</th><th>Father</th><th>Mother</th><th>Date Mated</th><th>Litters</th><th>Actions</th></tr></thead>
             <tbody>
             {% for bc in colony.breeder_cages %}
                 <tr>
@@ -43,8 +43,8 @@
                             Other
                         {% endif %}
                     </td>
-                    <td>{{ bc.mother_id }}</td>
                     <td>{{ bc.father_id }}</td>
+                    <td>{{ bc.mother_id }}</td>
                     <td>{{ bc.date_mated or '-' }}</td>
                     <td>{{ bc.litters | join(', ') }}</td>
                     <td>
@@ -79,18 +79,18 @@
                             <small class="text-muted">Changing this will update the breeder cage ID and parent assignments.</small>
                         </div>
                         <div class="form-group mb-3">
-                            <label class="form-label">Mother</label>
-                            <select class="form-control" name="mother_id" required>
-                                {% for a in colony.animals if a.sex == 'F' %}
-                                    <option value="{{ a.animal_id }}" {% if a.animal_id == bc.mother_id %}selected{% endif %}>{{ a.animal_id }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group mb-3">
                             <label class="form-label">Father</label>
                             <select class="form-control" name="father_id" required>
                                 {% for a in colony.animals if a.sex == 'M' %}
                                     <option value="{{ a.animal_id }}" {% if a.animal_id == bc.father_id %}selected{% endif %}>{{ a.animal_id }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group mb-3">
+                            <label class="form-label">Mother</label>
+                            <select class="form-control" name="mother_id" required>
+                                {% for a in colony.animals if a.sex == 'F' %}
+                                    <option value="{{ a.animal_id }}" {% if a.animal_id == bc.mother_id %}selected{% endif %}>{{ a.animal_id }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -144,30 +144,31 @@
 
     {# Add Litter Modals #}
     {% for bc in colony.breeder_cages %}
-        {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
-        <div class="modal fade" id="addLitterModal{{ safe_id }}" tabindex="-1">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Add Litter for Breeder Cage {{ bc.cage_id }}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <form id="addLitterForm{{ safe_id }}" method="POST" action="{{ url_for('add_cage') }}">
-                            <input type="hidden" name="breeder_cage_id" value="{{ bc.cage_id }}">
-                            <div class="mb-3">
-                                <label class="form-label">Select Existing Cage (optional)</label>
-                                <select class="form-select" name="existing_cage_id">
-                                    <option value="">-- Create new litter below --</option>
-                                    {% set all_cages = colony.animals | map(attribute='cage_id') | unique | list %}
-                                    {% for cid in all_cages %}
-                                        {% if cid != bc.cage_id %}
-                                        <option value="{{ cid }}">{{ cid }}</option>
-                                        {% endif %}
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <small class="text-muted">Pick an existing cage to link as a litter, or leave blank to create a new one.</small>
+    {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
+    <div class="modal fade" id="addLitterModal{{ safe_id }}" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Litter for Breeder Cage {{ bc.cage_id }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addLitterForm{{ safe_id }}" method="POST" action="{{ url_for('add_cage') }}">
+                        <input type="hidden" name="breeder_cage_id" value="{{ bc.cage_id }}">
+                        <div class="mb-3">
+                            <label class="form-label">Select Cage</label>
+                            <select class="form-select" name="existing_cage_id" id="existingCageSelect{{ safe_id }}">
+                                <option value="">Select Cage</option>
+                                <option value="new">Add New Cage</option>
+                                {% set all_cages = colony.animals | map(attribute='cage_id') | reject("equalto", none) | unique | list | sort %}
+                                {% for cid in all_cages %}
+                                    {% if cid != bc.cage_id %}
+                                    <option value="{{ cid }}">{{ cid }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="new-litter-fields" style="display:none;">
                             <div class="mb-3">
                                 <label class="form-label">Cage ID</label>
                                 <input type="text" class="form-control" name="cage_id">
@@ -205,15 +206,16 @@
                                 <label class="form-label">Notes</label>
                                 <textarea class="form-control" name="notes" rows="3"></textarea>
                             </div>
-                        </form>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="submit" form="addLitterForm{{ safe_id }}" class="btn btn-success">Add Litter</button>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" form="addLitterForm{{ safe_id }}" class="btn btn-success">Add Litter</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 </div>
             </div>
         </div>
+    </div>
     {% endfor %}
 
     <hr />
@@ -476,6 +478,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 element.textContent = 'N/A';
             }
         }
+    });
+
+    document.querySelectorAll('select[name="existing_cage_id"]').forEach(function(sel) {
+        var modalBody = sel.closest('.modal-body');
+        var fields = modalBody.querySelector('.new-litter-fields');
+        var inputs = fields.querySelectorAll('input, select, textarea');
+        function toggle() {
+            var isNew = sel.value === 'new';
+            fields.style.display = isNew ? '' : 'none';
+            // Enable inputs only when new cage option selected
+            inputs.forEach(function(el) {
+                el.disabled = !isNew;
+            });
+        }
+        toggle();
+        sel.addEventListener('change', toggle);
     });
 });
 </script>
