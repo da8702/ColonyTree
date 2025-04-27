@@ -455,19 +455,6 @@ document.addEventListener('DOMContentLoaded', function() {
             cy.on('mouseout', 'node', function(e) {
                 e.target.style('border-width', '1px');
             });
-
-            // Add zoom buttons
-            const zoomIn = document.createElement('button');
-            zoomIn.className = 'btn btn-sm btn-primary position-fixed bottom-0 end-0 m-3';
-            zoomIn.innerHTML = 'Zoom In';
-            zoomIn.onclick = () => cy.zoom(cy.zoom() * 1.2);
-            document.body.appendChild(zoomIn);
-
-            const zoomOut = document.createElement('button');
-            zoomOut.className = 'btn btn-sm btn-primary position-fixed bottom-0 end-0 m-3 me-5';
-            zoomOut.innerHTML = 'Zoom Out';
-            zoomOut.onclick = () => cy.zoom(cy.zoom() * 0.8);
-            document.body.appendChild(zoomOut);
         })
         .catch(error => {
             console.error('Error loading colony data:', error);
