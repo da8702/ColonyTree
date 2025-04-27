@@ -144,9 +144,42 @@ document.addEventListener('DOMContentLoaded', function() {
                     'background-color': 'yellow',
                     'color': '#000000'
                 }
+            },
+            {
+                selector: '.faded',
+                style: {
+                    'opacity': 0.2
+                }
+            },
+            {
+                selector: '.highlight',
+                style: {
+                    'border-width': 3,
+                    'border-color': '#FFD700'
+                }
             }
         ],
         wheelSensitivity: 0.125
+    });
+
+    // Register click/tap handlers for highlight behavior
+    cy.on('tap', 'node', function(evt) {
+        const clicked = evt.target;
+        // get node + its incident edges + adjacent nodes
+        const neighborhood = clicked.closedNeighborhood();
+        // fade out all others
+        cy.elements().not(neighborhood).addClass('faded');
+        // remove fade from neighborhood
+        neighborhood.removeClass('faded');
+        // clear previous highlight and highlight the clicked node
+        cy.elements().removeClass('highlight');
+        clicked.addClass('highlight');
+    });
+    // tap background to reset all styles
+    cy.on('tap', function(evt) {
+        if (evt.target === cy) {
+            cy.elements().removeClass('faded highlight');
+        }
     });
 
     // Custom layout function for animal tree
