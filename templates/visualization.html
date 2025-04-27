@@ -61,8 +61,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 style: {
                     'content': 'data(label)',
                     'text-wrap': 'wrap',
-                    'text-max-width': '100px',
-                    'font-size': '12px',
+                    'text-max-width': '150px',
+                    'font-size': '16px',
                     'text-valign': 'center',
                     'text-halign': 'center',
                     'background-color': '#ffffff',
@@ -85,21 +85,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 selector: 'node[genotype="Homo (+/+)"]',
                 style: {
                     'background-color': '#3498db',  // Blue for Homo
-                    'color': '#ffffff'  // White text for contrast
+                    'color': '#000000'  // Black text for contrast
                 }
             },
             {
                 selector: 'node[genotype="Het (+/-)"]',
                 style: {
                     'background-color': '#2ecc71',  // Green for Het
-                    'color': '#ffffff'  // White text for contrast
+                    'color': '#000000'  // Black text for contrast
                 }
             },
             {
                 selector: 'node[genotype="WT (-/-)"]',
                 style: {
                     'background-color': '#e74c3c',  // Red for WT
-                    'color': '#ffffff'  // White text for contrast
+                    'color': '#000000'  // Black text for contrast
                 }
             },
             {
@@ -127,15 +127,15 @@ document.addEventListener('DOMContentLoaded', function() {
             {
                 selector: 'node[breeder="true"][genotype="Homo (+/+)"]',
                 style: {
-                    'background-color': 'purple',
-                    'color': '#ffffff'
+                    'background-color': '#cc99ff',  // pastel purple
+                    'color': '#000000'
                 }
             },
             {
                 selector: 'node[breeder="true"][genotype="Het (+/-)"]',
                 style: {
                     'background-color': 'orange',
-                    'color': '#ffffff'
+                    'color': '#000000'
                 }
             },
             {
@@ -145,7 +145,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     'color': '#000000'
                 }
             }
-        ]
+        ],
+        wheelSensitivity: 0.125
     });
 
     // Custom layout function for animal tree
@@ -262,11 +263,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     cy.add({
                         data: {
                             id: animal.animal_id,
-                            label: `${animal.animal_id}\n${animal.genotype}`,
+                            label: `${animal.animal_id}`,
                             sex: animal.sex,
-                            genotype: animal.genotype,
-                            mother_id: animal.mother_id,
-                            father_id: animal.father_id
+                            genotype: animal.genotype
                         }
                     });
                 });
@@ -316,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 nodesList.forEach(getGen);
                 // Determine roots for breadthfirst: founders (gen = 0)
                 const roots = nodesList.filter(id => generations[id] === 0);
-                const VERTICAL_SPACING = 400;
+                const VERTICAL_SPACING = 250;
                 cy.layout({
                     name: 'breadthfirst',
                     directed: true,
@@ -400,7 +399,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         cy.add({
                             data: {
                                 id: `cage_${cage.cage_id}`,
-                                label: `${cage.cage_id}\n${genotypeText}\n${cage.animals.length}`,
+                                label: `${cage.cage_id}\n${cage.animals.length}`,
                                 node_type: 'cage',
                                 sex: cageSex,
                                 genotype: genotypeText,
