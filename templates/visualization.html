@@ -150,12 +150,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Custom layout function for animal tree
     function customAnimalLayout() {
-        // Vertical spacing between generations
         const VERTICAL_SPACING = 200;
-        // Determine dynamic horizontal spacing to avoid overlaps
-        const containerWidth = cy.width() || cy.container().clientWidth;
-        const MARGIN = 100;  // total side margins
-        // Collect animal nodes and parent edges
+        // Collect nodes and parent edges
         const nodes = cy.nodes().filter(n => !n.data('node_type') || n.data('node_type') !== 'cage');
         const parentEdges = cy.edges().filter(e => e.data('edge_type') === 'parent');
         // Compute generation for each node
@@ -176,8 +172,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const key = mom + '|' + dad;
             (childrenByPair[key] = childrenByPair[key] || []).push(n.id());
         });
-        // Layout gen=0: parents side-by-side
-        // Compute couples and solo founders as placeholders
+        // Identify founder-level couples and singles
         const gen0 = nodes.filter(n => generations[n.id()] === 0).map(n => n.id());
         const couples = Object.keys(childrenByPair)
             .map(k => {const [m, d] = k.split('|'); return {key: k, m, d};})
@@ -185,36 +180,41 @@ document.addEventListener('DOMContentLoaded', function() {
         const taken = couples.flatMap(c => [c.m, c.d]);
         const singles = gen0.filter(id => !taken.includes(id));
         const items = [...couples, ...singles.map(id => ({single: id}))];
-        // Compute dynamic horizontal spacing based on number of placeholders and max children count
-        const maxInRow0 = items.length;
-        const maxKids = Math.max(...Object.values(childrenByPair).map(arr => arr.length), 1);
-        const slots = Math.max(maxInRow0, maxKids);
-        const HORIZONTAL_SPACING = (containerWidth - MARGIN) / slots;
-        const HALF_SPACING = HORIZONTAL_SPACING / 2;
-        let x0 = -((items.length - 1) * HORIZONTAL_SPACING) / 2;
+        // Compute horizontal block spacing
+        const containerWidth = cy.width() || cy.container().clientWidth;
+        const MARGIN = 100;
+        const numBlocks = items.length;
+        const MIN_BLOCK_SPACING = 200;
+        const blockSpacing = Math.max(MIN_BLOCK_SPACING, (containerWidth - MARGIN) / numBlocks);
+        const halfBlock = blockSpacing / 4;
+        // Lay out blocks at y=0
+        let baseX = -((numBlocks - 1) * blockSpacing) / 2;
         const centers = {};
         items.forEach(it => {
+            const xCenter = baseX;
             if (it.single) {
-                cy.getElementById(it.single).position({x: x0, y: 0});
+                cy.getElementById(it.single).position({x: xCenter, y: 0});
             } else {
-                cy.getElementById(it.m).position({x: x0 - HALF_SPACING, y: 0});
-                cy.getElementById(it.d).position({x: x0 + HALF_SPACING, y: 0});
-                centers[it.key] = x0;
+                cy.getElementById(it.m).position({x: xCenter - halfBlock, y: 0});
+                cy.getElementById(it.d).position({x: xCenter + halfBlock, y: 0});
+                centers[it.key] = xCenter;
             }
-            x0 += HORIZONTAL_SPACING;
+            baseX += blockSpacing;
         });
-        // Layout gen=1: children under each parent pair
+        // Lay out next-generation children under each block
         const y1 = VERTICAL_SPACING;
         couples.forEach(c => {
             const kids = childrenByPair[c.key] || [];
+            const kCount = kids.length;
+            const siblingSpacing = blockSpacing;
+            const x0 = centers[c.key] - ((kCount - 1) * siblingSpacing) / 2;
             kids.forEach((kid, idx) => {
                 cy.getElementById(kid).position({
-                    x: centers[c.key] + (idx - (kids.length-1)/2) * HORIZONTAL_SPACING,
+                    x: x0 + idx * siblingSpacing,
                     y: y1
                 });
             });
         });
-        // Center entire graph
         cy.center();
     }
 
@@ -294,7 +294,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 // Run animal tree layout
-                customAnimalLayout();
+                // Use breadthfirst layout with explicit generation rows (isolates at row 0)
+                // First, build generation map: isolates = -1, founders = 0, kids = 1, etc.
+                const generations = {};
+                const nodesList = cy.nodes().map(n => n.id());
+                const parentEdges = cy.edges().filter(e => e.data('edge_type') === 'parent');
+                function getGen(id) {
+                    if (generations[id] !== undefined) return generations[id];
+                    const ins = parentEdges.filter(e => e.target().id() === id);
+                    const outs = parentEdges.filter(e => e.source().id() === id);
+                    if (ins.length === 0 && outs.length === 0) {
+                        generations[id] = -1;
+                    } else if (ins.length === 0) {
+                        generations[id] = 0;
+                    } else {
+                        const pGens = ins.map(e => getGen(e.source().id()));
+                        generations[id] = Math.max(...pGens) + 1;
+                    }
+                    return generations[id];
+                }
+                nodesList.forEach(getGen);
+                // Determine roots for breadthfirst: founders (gen = 0)
+                const roots = nodesList.filter(id => generations[id] === 0);
+                const VERTICAL_SPACING = 200;
+                cy.layout({
+                    name: 'breadthfirst',
+                    directed: true,
+                    roots: roots,
+                    spacingFactor: 2.0,
+                    avoidOverlap: true,
+                    padding: 50,
+                    fit: false,
+                    animate: false,
+                    transform: (node, pos) => {
+                        // row offset = generation + 1 (isolates row 0)
+                        const row = generations[node.id()] + 1;
+                        return { x: pos.x, y: row * VERTICAL_SPACING };
+                    }
+                }).run();
+                // Center graph after layout
+                cy.center();
             } 
             else if (visType === 'cages') {
                 // Create cage nodes with breeder genotype overrides
