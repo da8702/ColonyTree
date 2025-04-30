@@ -8,6 +8,9 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Cages</h2>
         <div class="d-flex gap-2">
+            <form action="{{ url_for('toggle_show_deceased') }}" method="post" class="d-inline">
+                <button type="submit" class="btn btn-warning">{{ 'Hide Deceased' if show_deceased else 'Show Deceased' }}</button>
+            </form>
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#renameColonyModal">Rename Colony</button>
             <a href="{{ url_for('view_animals') }}" class="btn btn-secondary">Animals</a>
             <a href="{{ url_for('add_animal') }}" class="btn btn-primary">Add Animal</a>
@@ -22,7 +25,18 @@
     {% if colony.breeder_cages %}
     <div class="table-responsive mb-4">
         <table class="table table-striped">
-            <thead><tr><th>Cage ID</th><th>Genotype</th><th>Father</th><th>Mother</th><th>Date Mated</th><th>Litters</th><th>Actions</th></tr></thead>
+            <thead>
+                <tr>
+                    <th>Cage ID</th>
+                    <th>Genotype</th>
+                    <th>Father</th>
+                    <th>Mother</th>
+                    <th>Date Mated</th>
+                    <th>Litters</th>
+                    <th>Alive</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
             <tbody>
             {% for bc in colony.breeder_cages %}
                 <tr>
@@ -48,6 +62,15 @@
                     <td>{{ bc.date_mated or '-' }}</td>
                     <td>{{ bc.litters | join(', ') }}</td>
                     <td>
+                        {% set all_dead = True %}
+                        {% for lit in bc.litters %}
+                            {% if not colony.get_animal(lit).deceased %}
+                                {% set all_dead = False %}
+                            {% endif %}
+                        {% endfor %}
+                        {% if bc.litters and all_dead %}Deceased{% endif %}
+                    </td>
+                    <td>
                         <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#addLitterModal{{ safe_id }}">Add Litter</button>
                         <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteBreederCageModal{{ safe_id }}">Delete</button>
                     </td>
@@ -63,6 +86,12 @@
     {# Edit Breeder Cage Modals #}
     {% for bc in colony.breeder_cages %}
     {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
+    {% set all_dead = True %}
+    {% for lit in bc.litters %}
+        {% if not colony.get_animal(lit).deceased %}
+            {% set all_dead = False %}
+        {% endif %}
+    {% endfor %}
     <div class="modal fade" id="editBreederCageModal{{ safe_id }}" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -101,6 +130,10 @@
                         <div class="form-group mb-3">
                             <label class="form-label">Notes</label>
                             <textarea class="form-control" name="notes" rows="3">{{ bc.notes or '' }}</textarea>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="editBreederDeceased{{ safe_id }}" name="deceased" {% if bc.litters and all_dead %}checked{% endif %}>
+                            <label class="form-check-label" for="editBreederDeceased{{ safe_id }}">Deceased</label>
                         </div>
                         <div class="d-none">
                             <button type="submit" class="btn btn-primary">Direct Submit</button>
@@ -224,23 +257,12 @@
     {% set breeder_ids = colony.breeder_cages | map(attribute='cage_id') | list %}
 
     {# Regular Cages Section #}
-    {% if colony.animals %}
-        {% set cages = {} %}
-        {% for animal in colony.animals %}
-            {% if animal.cage_id and animal.cage_id not in breeder_ids %}
-                {% if animal.cage_id not in cages %}
-                    {% set _ = cages.update({animal.cage_id: []}) %}
-                {% endif %}
-                {% set _ = cages[animal.cage_id].append(animal) %}
-            {% endif %}
-        {% endfor %}
-
-        {% if cages %}
+    {% if cages %}
         <div class="table-responsive">
             <table class="table table-striped">
                 <thead>
                     <tr>
-                        <th>Cage ID</th><th>Count</th><th>Animals</th><th>Sex</th><th>Genotype</th><th>DOB</th><th>Age</th><th>Weaned</th><th></th>
+                        <th>Cage ID</th><th>Count</th><th>Animals</th><th>Sex</th><th>Genotype</th><th>DOB</th><th>Age</th><th>Weaned</th><th>Alive</th><th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -273,6 +295,20 @@
                                 {% if w %}{{ w.strftime('%Y-%m-%d') }}{% else %}-{% endif %}{% if not loop.last %}, {% endif %}
                             {% endfor %}
                         </td>
+                        <td>
+                            {% set orig = colony.animals | selectattr('cage_id','equalto',cage_id) | list %}
+                            {% if orig %}
+                                {# Determine if all animals in this cage are deceased #}
+                                {% set all_dead = (orig | selectattr('deceased','equalto',False) | list | length) == 0 %}
+                                {% if all_dead %}
+                                    Deceased
+                                {% else %}
+                                    Alive
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                         <td><button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteCageModal{{ cage_id|replace('.', '_') }}">Delete</button></td>
                     </tr>
                 {% endfor %}
@@ -285,12 +321,12 @@
             <div class="modal fade" id="editCageModal{{ cage_id|replace('.', '_') }}" tabindex="-1">
                 <div class="modal-dialog modal-lg">
                     <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Edit Cage {{ cage_id }}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <form id="editCageForm{{ cage_id|replace('.', '_') }}" method="POST" class="edit-cage-form" action="{{ url_for('edit_cage') }}">
+                        <form id="editCageForm{{ cage_id|replace('.', '_') }}" method="POST" action="{{ url_for('edit_cage') }}">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Edit Cage {{ cage_id }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
                                 <input type="hidden" name="cage_id" value="{{ cage_id }}">
                                 <input type="hidden" name="view_response" value="true">
                                 <div class="form-group mb-3">
@@ -329,16 +365,21 @@
                                     <label class="form-label">Notes</label>
                                     <textarea class="form-control" name="notes" rows="3">{{ animals|map(attribute='notes')|unique|list|length == 1 and animals[0].notes or '' }}</textarea>
                                 </div>
-                                <!-- Direct submit button for non-JavaScript fallback -->
-                                <div class="d-none">
-                                    <button type="submit" class="btn btn-primary">Direct Submit</button>
+                                <!-- Deceased checkbox -->
+                                {% set all_dead = True %}
+                                {% for a in animals %}
+                                    {% if not a.deceased %}{% set all_dead = False %}{% endif %}
+                                {% endfor %}
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="editCageDeceased{{ cage_id|replace('.', '_') }}" name="deceased" {% if all_dead %}checked{% endif %}>
+                                    <label class="form-check-label" for="editCageDeceased{{ cage_id|replace('.', '_') }}">Deceased</label>
                                 </div>
-                            </form>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" form="editCageForm{{ cage_id|replace('.', '_') }}" class="btn btn-primary">Save Changes</button>
-                        </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save Changes</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             </div>
@@ -365,11 +406,8 @@
                 </div>
             </div>
         {% endfor %}
-        {% else %}
-        <div class="alert alert-info">No cages in this colony. Add animals with cage IDs to create cages.</div>
-        {% endif %}
     {% else %}
-    <div class="alert alert-info">No animals in this colony. Add some animals to get started.</div>
+    <div class="alert alert-info">No cages in this colony. Add animals with cage IDs to create cages.</div>
     {% endif %}
 
     <!-- Rename Colony Modal -->
@@ -494,6 +532,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         toggle();
         sel.addEventListener('change', toggle);
+    });
+
+    // When an Edit Cage modal is triggered, fetch latest cage data and update the checkbox
+    document.querySelectorAll('a[data-bs-toggle="modal"]').forEach(function(link) {
+        var target = link.getAttribute('data-bs-target');
+        if (!target.startsWith('#editCageModal')) return;
+        link.addEventListener('click', function() {
+            var cageId = link.textContent.trim();
+            fetch("{{ url_for('get_colony_data', data_type='cages') }}")
+                .then(response => response.json())
+                .then(data => {
+                    var cage = data.cages.find(c => c.cage_id === cageId);
+                    if (!cage) return;
+                    var chk = document.querySelector(target + ' input[name="deceased"]');
+                    if (chk) chk.checked = Boolean(cage.deceased);
+                });
+        });
     });
 });
 </script>

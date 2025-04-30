@@ -18,6 +18,7 @@ class Animal:
         self.cage_id = cage_id
         self.old_cage_id: Optional[str] = None
         self.date_weaned = date_weaned
+        self.deceased = False
 
         # Automatically link to parents' children lists
         if mother:
@@ -40,7 +41,8 @@ class Animal:
             'notes': self.notes,
             'cage_id': self.cage_id,
             'date_weaned': self.date_weaned.isoformat() if self.date_weaned else None,
-            'old_cage_id': self.old_cage_id
+            'old_cage_id': self.old_cage_id,
+            'deceased': self.deceased
         }
     
     @classmethod
@@ -62,6 +64,7 @@ class Animal:
             cage_id=data.get('cage_id'),
             date_weaned=date_weaned
         )
+        animal.deceased = data.get('deceased', False)
         # Set old_cage_id if present
         if data.get('old_cage_id'):
             animal.old_cage_id = data['old_cage_id']

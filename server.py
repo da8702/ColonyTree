@@ -17,6 +17,7 @@ import pickle
 import base64
 from models import Animal, Colony
 import logging
+from urllib.parse import urlparse
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -25,8 +26,8 @@ logger = logging.getLogger(__name__)
 # Create a custom session interface to handle colony objects
 class CustomSessionInterface(SecureCookieSessionInterface):
     def open_session(self, app, request):
-        s = SecureCookieSession()
-        return s
+        # Load the session from the cookie (instead of always creating a new one)
+        return super().open_session(app, request)
 
     def save_session(self, app, session, response):
         # We'll handle colony objects specially
@@ -89,7 +90,8 @@ def save_colony(colony, filename):
             'father_id': animal.father.animal_id if animal.father else None,
             'notes': animal.notes if hasattr(animal, 'notes') else None,
             'cage_id': animal.cage_id if hasattr(animal, 'cage_id') else None,
-            'date_weaned': animal.date_weaned.isoformat() if hasattr(animal, 'date_weaned') and animal.date_weaned else None
+            'date_weaned': animal.date_weaned.isoformat() if hasattr(animal, 'date_weaned') and animal.date_weaned else None,
+            'deceased': animal.deceased
         }
         data['animals'].append(animal_data)
     
@@ -158,6 +160,9 @@ def load_colony(filename):
                     print(f"Warning: Father animal with ID {animal_data['father_id']} not found for animal {animal.animal_id}")
             except Exception as e:
                 print(f"Error setting father for animal {animal.animal_id}: {str(e)}")
+        
+        # Restore deceased flag
+        animal.deceased = animal_data.get('deceased', False)
     
     # Load breeder cages if present
     colony.breeder_cages = data.get('breeder_cages', [])
@@ -263,7 +268,14 @@ def view_animals():
     """View the animals in the current colony"""
     if not current_colony:
         return redirect(url_for('list_colonies'))
-    return render_template('animals_view.html', colony=current_colony)
+    show_deceased = session.get('show_deceased', False)
+    print(f"Debug/view_animals: show_deceased={show_deceased}, total animals={len(current_colony.animals)}")
+    if show_deceased:
+        animals = current_colony.animals
+    else:
+        animals = [a for a in current_colony.animals if not getattr(a, 'deceased', False)]
+    print(f"Debug/view_animals: returning {len(animals)} animals")
+    return render_template('animals_view.html', colony=current_colony, animals=animals, show_deceased=show_deceased)
 
 @app.route('/colony/cages')
 def view_cages():
@@ -274,27 +286,44 @@ def view_cages():
         print("No colony loaded, redirecting to colony list")
         return redirect(url_for('list_colonies'))
     
-    has_colony_in_session = session.get('has_colony', False)
-    colony_name_in_session = session.get('colony_name', 'None')
-    print(f"Rendering cages view with colony: {current_colony.name}")
-    print(f"Colony in session: {has_colony_in_session}, name: {colony_name_in_session}")
-    # Debug: print all animal IDs and cage assignments
-    print("DEBUG: Animals and their cages:")
-    for a in current_colony.animals:
-        print(f"  {a.animal_id}: cage_id={a.cage_id}, sex={a.sex}, dob={a.dob}")
-    
-    # Pass extra debug info to the template
-    template_data = {
-        'colony': current_colony,
-        'has_colony_in_session': has_colony_in_session,
-        'debug_info': {
-            'current_colony_name': current_colony.name,
-            'colony_name_in_session': colony_name_in_session,
-            'names_match': current_colony.name == colony_name_in_session if has_colony_in_session else False
-        }
-    }
-    
-    return render_template('cages_view.html', **template_data)
+    # Show or hide deceased cages
+    show_deceased = session.get('show_deceased', False)
+    print(f"Debug/view_cages: show_deceased={show_deceased}")
+    # Build cages: include only cages that should be visible under the toggle
+    cage_ids = current_colony.get_unique_cage_ids()
+    cages = {}
+    for cid in cage_ids:
+        # gather all animals for this cage
+        all_animals = [a for a in current_colony.animals if a.cage_id == cid]
+        if not all_animals:
+            continue
+        if show_deceased:
+            # show all animals in the cage
+            display_animals = all_animals
+        else:
+            # show only living animals; skip cage if none alive
+            display_animals = [a for a in all_animals if not getattr(a, 'deceased', False)]
+            if not display_animals:
+                continue
+        cages[cid] = display_animals
+    # Also pass breeder cages and show_deceased
+    print(f"Debug/view_cages: returning {len(cages)} cages")
+    return render_template('cages_view.html', colony=current_colony, cages=cages, show_deceased=show_deceased)
+
+@app.route('/toggle_show_deceased', methods=['POST'])
+def toggle_show_deceased():
+    """Toggle the visibility of deceased animals and cages"""
+    session['show_deceased'] = not session.get('show_deceased', False)
+    print(f"Debug/toggle_show_deceased: show_deceased now = {session['show_deceased']}")
+    # Decide redirect based on referrer path
+    ref = request.referrer or ''
+    path = urlparse(ref).path
+    if path.startswith(url_for('view_cages')):
+        return redirect(url_for('view_cages'))
+    elif path.startswith(url_for('view_animals')):
+        return redirect(url_for('view_animals'))
+    else:
+        return redirect(url_for('view_colony'))
 
 @app.route('/add_animal', methods=['GET', 'POST'])
 def add_animal():
@@ -362,7 +391,8 @@ def visualization(vis_type=None):
     if vis_type not in ['animals', 'cages']:
         vis_type = 'animals'
         
-    return render_template('visualization.html', colony=current_colony, vis_type=vis_type)
+    show_deceased = session.get('show_deceased', False)
+    return render_template('visualization.html', colony=current_colony, vis_type=vis_type, show_deceased=show_deceased)
 
 @app.route('/api/colony')
 @app.route('/api/colony/<data_type>')
@@ -392,7 +422,8 @@ def get_colony_data(data_type=None):
             'father_id': animal.father.animal_id if animal.father else None,
             'notes': getattr(animal, 'notes', None),
             'cage_id': getattr(animal, 'cage_id', None),
-            'date_weaned': animal.date_weaned.isoformat() if hasattr(animal, 'date_weaned') and animal.date_weaned else None
+            'date_weaned': animal.date_weaned.isoformat() if hasattr(animal, 'date_weaned') and animal.date_weaned else None,
+            'deceased': getattr(animal, 'deceased', False)
         }
         data['animals'].append(animal_data)
     
@@ -413,6 +444,10 @@ def get_colony_data(data_type=None):
         data['cages'] = list(unique_cages.values())
         # Include breeder cages and their litters for cage visualization
         data['breeder_cages'] = current_colony.breeder_cages
+        # Include deceased flag to cage data
+        for cage in data['cages']:
+            # Determine if all animals in this cage are deceased
+            cage['deceased'] = all(a['deceased'] for a in data['animals'] if a['cage_id'] == cage['cage_id'])
         # Include permanent cage transfer edges for any animal with old_cage_id
         transfers = []
         for animal in current_colony.animals:
@@ -532,7 +567,8 @@ def edit_animal(animal_id):
                     'cage_id': request.form.get('cage_id'),
                     'mother_id': request.form.get('mother_id'),
                     'father_id': request.form.get('father_id'),
-                    'notes': request.form.get('notes')
+                    'notes': request.form.get('notes'),
+                    'deceased': request.form.get('deceased')
                 }
                 print(f"Form data: {data}")
         
@@ -560,25 +596,23 @@ def edit_animal(animal_id):
         mother_id = data.get('mother_id')
         father_id = data.get('father_id')
         notes = data.get('notes', '')
+        deceased_flag = data.get('deceased', False)
         
         print(f"New values: id={new_id}, sex={sex}, genotype={genotype}, dob={dob_str}, date_weaned={date_weaned_str}, cage={cage_id}, mother={mother_id}, father={father_id}")
         
-        # Parse dates
+        # Parse date strings into date objects
         dob = None
         if dob_str:
             try:
                 dob = date.fromisoformat(dob_str)
             except ValueError:
-                print(f"Invalid date of birth format: {dob_str}")
-                return jsonify({'success': False, 'error': f'Invalid date of birth format: {dob_str}'}), 400
-                
+                print(f"Invalid DOB format: {dob_str}")
         date_weaned = None
         if date_weaned_str:
             try:
                 date_weaned = date.fromisoformat(date_weaned_str)
             except ValueError:
-                print(f"Invalid date weaned format: {date_weaned_str}")
-                return jsonify({'success': False, 'error': f'Invalid date weaned format: {date_weaned_str}'}), 400
+                print(f"Invalid date_weaned format: {date_weaned_str}")
         
         # Update the animal ID if it changed
         if new_id and new_id != original_id:
@@ -609,6 +643,14 @@ def edit_animal(animal_id):
         if notes is not None:  # Allow empty notes to clear existing notes
             animal.notes = notes
             
+        # Update deceased flag for this animal
+        if request.method == 'POST' and not request.is_json:
+            deceased_flag = 'deceased' in request.form
+        else:
+            deceased_flag = bool(data.get('deceased', False))
+        print(f"edit_animal: deceased_flag={deceased_flag}")
+        animal.deceased = deceased_flag
+        
         # Update mother if changed
         old_mother_id = animal.mother.animal_id if animal.mother else None
         if mother_id != old_mother_id:
@@ -964,7 +1006,11 @@ def delete_cage():
 def edit_cage():
     """Update all animals in a cage with the specified properties"""
     global current_colony
-    
+
+    # Initialize dob and date_weaned so they're always in scope
+    dob = None
+    date_weaned = None
+
     print("\n----- EDIT CAGE REQUEST RECEIVED -----")
     print(f"Request method: {request.method}")
     print(f"Content type: {request.content_type}")
@@ -1064,27 +1110,29 @@ def edit_cage():
         dob_str = data.get('dob')
         date_weaned_str = data.get('date_weaned')
         notes = data.get('notes', '')
-        
-        print(f"Properties to update - sex: {sex}, genotype: {genotype}, dob: {dob_str}, weaned: {date_weaned_str}, notes: {notes}")
-        
-        # Convert date strings to date objects
+        # Parse cage edit date fields to ensure dob and date_weaned are defined
         dob = None
         if dob_str:
             try:
                 dob = date.fromisoformat(dob_str)
-                print(f"Parsed DOB: {dob}")
-            except ValueError as e:
-                print(f"Error parsing DOB: {e}")
-                return jsonify({'success': False, 'error': f'Invalid date of birth format: {dob_str}'}), 400
-                
+            except ValueError:
+                print(f"Invalid cage DOB format: {dob_str}")
         date_weaned = None
         if date_weaned_str:
             try:
                 date_weaned = date.fromisoformat(date_weaned_str)
-                print(f"Parsed date weaned: {date_weaned}")
-            except ValueError as e:
-                print(f"Error parsing date weaned: {e}")
-                return jsonify({'success': False, 'error': f'Invalid date weaned format: {date_weaned_str}'}), 400
+            except ValueError:
+                print(f"Invalid cage date_weaned format: {date_weaned_str}")
+        # Determine deceased flag: checkbox presence indicates True
+        if request.method == 'POST' and not request.is_json:
+            deceased_flag = 'deceased' in request.form
+        else:
+            deceased_flag = bool(data.get('deceased', False))
+        print(f"edit_cage: deceased_flag={deceased_flag}, view_response={view_response}")
+        # Mark all animals in this cage as deceased or alive based on checkbox
+        for animal in animals_in_cage:
+            animal.deceased = bool(deceased_flag)
+        print(f"edit_cage: updated animals in cage {cage_id}: {[ (a.animal_id, a.deceased) for a in animals_in_cage ]}")
         
         # Update each animal in the cage
         for animal in animals_in_cage:
@@ -1112,6 +1160,10 @@ def edit_cage():
         save_colony(current_colony, current_colony.name)
         print("Colony saved successfully")
         
+        # If user marked the cage deceased, ensure we show deceased entries
+        if bool(deceased_flag):
+            session['show_deceased'] = True
+
         # For normal form submission, redirect instead of returning JSON
         if view_response and not request.is_json:
             print("Redirecting to view_cages")
@@ -1247,6 +1299,7 @@ def edit_breeder_cage():
     father_id = request.form.get('father_id')
     date_mated = request.form.get('date_mated') or None
     notes = request.form.get('notes') or ''
+    deceased_flag = request.form.get('deceased')
 
     for bc in current_colony.breeder_cages:
         if bc['cage_id'] == original_cage_id:
@@ -1271,6 +1324,11 @@ def edit_breeder_cage():
             bc['date_mated'] = date_mated
             bc['notes'] = notes
             break
+
+    # Update deceased status for all animals in this breeder cage
+    for animal in current_colony.animals:
+        if animal.cage_id == original_cage_id:
+            animal.deceased = bool(deceased_flag)
 
     # Save changes
     save_colony(current_colony, current_colony.name)
