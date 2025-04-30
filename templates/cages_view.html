@@ -62,13 +62,15 @@
                     <td>{{ bc.date_mated or '-' }}</td>
                     <td>{{ bc.litters | join(', ') }}</td>
                     <td>
-                        {% set all_dead = True %}
-                        {% for lit in bc.litters %}
-                            {% if not colony.get_animal(lit).deceased %}
-                                {% set all_dead = False %}
-                            {% endif %}
-                        {% endfor %}
-                        {% if bc.litters and all_dead %}Deceased{% endif %}
+                        {# Determine status for breeder cage: include parents and litters #}
+                        {% set group_ids = bc.litters + [bc.cage_id] %}
+                        {% set group_animals = colony.animals | selectattr('cage_id','in', group_ids) | list %}
+                        {% if group_animals %}
+                            {% set all_dead = (group_animals | selectattr('deceased','equalto', False) | list | length) == 0 %}
+                            {{ 'Deceased' if all_dead else 'Alive' }}
+                        {% else %}
+                            -
+                        {% endif %}
                     </td>
                     <td>
                         <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#addLitterModal{{ safe_id }}">Add Litter</button>
@@ -86,12 +88,10 @@
     {# Edit Breeder Cage Modals #}
     {% for bc in colony.breeder_cages %}
     {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
-    {% set all_dead = True %}
-    {% for lit in bc.litters %}
-        {% if not colony.get_animal(lit).deceased %}
-            {% set all_dead = False %}
-        {% endif %}
-    {% endfor %}
+    {# Compute initial deceased checkbox state using parents + litters #}
+    {% set group_ids = bc.litters + [bc.cage_id] %}
+    {% set group_animals = colony.animals | selectattr('cage_id','in', group_ids) | list %}
+    {% set all_dead = (group_animals | selectattr('deceased','equalto', False) | list | length) == 0 %}
     <div class="modal fade" id="editBreederCageModal{{ safe_id }}" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -132,7 +132,7 @@
                             <textarea class="form-control" name="notes" rows="3">{{ bc.notes or '' }}</textarea>
                         </div>
                         <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" id="editBreederDeceased{{ safe_id }}" name="deceased" {% if bc.litters and all_dead %}checked{% endif %}>
+                            <input class="form-check-input" type="checkbox" id="editBreederDeceased{{ safe_id }}" name="deceased" {% if all_dead %}checked{% endif %}>
                             <label class="form-check-label" for="editBreederDeceased{{ safe_id }}">Deceased</label>
                         </div>
                         <div class="d-none">

@@ -444,10 +444,14 @@ def get_colony_data(data_type=None):
         data['cages'] = list(unique_cages.values())
         # Include breeder cages and their litters for cage visualization
         data['breeder_cages'] = current_colony.breeder_cages
-        # Include deceased flag to cage data
+        # Include deceased flag to regular cages
         for cage in data['cages']:
-            # Determine if all animals in this cage are deceased
             cage['deceased'] = all(a['deceased'] for a in data['animals'] if a['cage_id'] == cage['cage_id'])
+        # Include deceased flag to breeder cages (parents + litters)
+        for bc in data['breeder_cages']:
+            # Compute group IDs: breeder cage + its litters
+            group_ids = [bc.get('cage_id')] + bc.get('litters', [])
+            bc['deceased'] = all(a['deceased'] for a in data['animals'] if a['cage_id'] in group_ids)
         # Include permanent cage transfer edges for any animal with old_cage_id
         transfers = []
         for animal in current_colony.animals:
