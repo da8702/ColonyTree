@@ -31,6 +31,11 @@
         <div class="col-md-12">
             <div class="d-flex justify-content-between">
                 <div>
+                    <form action="{{ url_for('toggle_show_deceased') }}" method="post" class="d-inline mb-0">
+                        <button type="submit" class="btn btn-warning">
+                            {{ 'Hide Deceased' if show_deceased else 'Show Deceased' }}
+                        </button>
+                    </form>
                     <a href="{{ url_for('view_animals') }}" class="btn btn-secondary">Back to Animals</a>
                     <a href="{{ url_for('view_cages') }}" class="btn btn-secondary">Back to Cages</a>
                 </div>
@@ -290,23 +295,34 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             console.log("Visualization data:", data);
             
+            // Determine if we should show deceased
+            const showDeceased = JSON.parse('{{ show_deceased|tojson }}');
+            
             if (visType === 'animals') {
-                // Create nodes for animals
-                data.animals.forEach(animal => {
+                // Filter out deceased animals if toggled off
+                let animalsToShow = data.animals;
+                if (!showDeceased) {
+                    animalsToShow = animalsToShow.filter(a => !a.deceased);
+                }
+                // Create nodes for remaining animals
+                animalsToShow.forEach(animal => {
                     cy.add({
                         data: {
                             id: animal.animal_id,
                             label: `${animal.animal_id}`,
                             sex: animal.sex,
-                            genotype: animal.genotype
+                            genotype: animal.genotype,
+                            deceased: animal.deceased
                         }
                     });
                 });
 
-                // Create edges for parent relationships
+                // Create edges for parent relationships only among shown animals
+                const animalSet = new Set(animalsToShow.map(a => a.animal_id));
                 data.animals.forEach(animal => {
+                    if (!animalSet.has(animal.animal_id)) return;
                     if (animal.mother_id) {
-                        cy.add({
+                        if (animalSet.has(animal.mother_id)) cy.add({
                             data: {
                                 source: animal.mother_id,
                                 target: animal.animal_id,
@@ -315,7 +331,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         });
                     }
                     if (animal.father_id) {
-                        cy.add({
+                        if (animalSet.has(animal.father_id)) cy.add({
                             data: {
                                 source: animal.father_id,
                                 target: animal.animal_id,
@@ -368,10 +384,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 cy.center();
             } 
             else if (visType === 'cages') {
+                // Filter cages and breeder cages if toggled off
+                let cagesToShow = data.cages;
+                let breedersToShow = data.breeder_cages;
+                if (!showDeceased) {
+                    cagesToShow = cagesToShow.filter(c => !c.deceased);
+                    breedersToShow = breedersToShow.filter(bc => !bc.deceased);
+                }
                 // Create cage nodes with breeder genotype overrides
-                if (data.cages && data.cages.length > 0) {
-                    const breederIds = data.breeder_cages.map(bc => bc.cage_id);
-                    data.cages.forEach(cage => {
+                if (cagesToShow && cagesToShow.length > 0) {
+                    const breederIds = breedersToShow.map(bc => bc.cage_id);
+                    cagesToShow.forEach(cage => {
                         // Determine predominant sex and genotype for the cage
                         let maleCount = 0;
                         let femaleCount = 0;
@@ -437,6 +460,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 sex: cageSex,
                                 genotype: genotypeText,
                                 breeder: isBreeder.toString(),
+                                deceased: cage.deceased,
                                 width: '120px',
                                 height: '60px'
                             }
@@ -445,7 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Only cages are displayed, no animal nodes
                     // Add breeder-to-litter arrows (use same arrow style as animal parent edges)
-                    data.breeder_cages.forEach(bc => {
+                    breedersToShow.forEach(bc => {
                         bc.litters.forEach(lit => {
                             cy.add({
                                 data: {

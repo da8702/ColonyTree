@@ -306,9 +306,21 @@ def view_cages():
             if not display_animals:
                 continue
         cages[cid] = display_animals
-    # Also pass breeder cages and show_deceased
-    print(f"Debug/view_cages: returning {len(cages)} cages")
-    return render_template('cages_view.html', colony=current_colony, cages=cages, show_deceased=show_deceased)
+    # Filter breeder cages based on show_deceased: include breeders with at least one alive animal or all if showing deceased
+    visible_breeder_cages = []
+    for bc in current_colony.breeder_cages:
+        group_ids = [bc.get('cage_id')] + bc.get('litters', [])
+        group_animals = [a for a in current_colony.animals if a.cage_id in group_ids]
+        if show_deceased or any(not a.deceased for a in group_animals):
+            visible_breeder_cages.append(bc)
+    print(f"Debug/view_cages: returning {len(cages)} cages and {len(visible_breeder_cages)} breeder cages")
+    return render_template(
+        'cages_view.html',
+        colony=current_colony,
+        cages=cages,
+        breeder_cages=visible_breeder_cages,
+        show_deceased=show_deceased
+    )
 
 @app.route('/toggle_show_deceased', methods=['POST'])
 def toggle_show_deceased():
@@ -322,6 +334,9 @@ def toggle_show_deceased():
         return redirect(url_for('view_cages'))
     elif path.startswith(url_for('view_animals')):
         return redirect(url_for('view_animals'))
+    elif path.startswith(url_for('visualization')):
+        # Stay on visualization pages when toggling deceased
+        return redirect(path)
     else:
         return redirect(url_for('view_colony'))
 

@@ -22,7 +22,7 @@
 
     {# Breeder Cages Section #}
     <h2>Breeder Cages</h2>
-    {% if colony.breeder_cages %}
+    {% if breeder_cages %}
     <div class="table-responsive mb-4">
         <table class="table table-striped">
             <thead>
@@ -38,7 +38,7 @@
                 </tr>
             </thead>
             <tbody>
-            {% for bc in colony.breeder_cages %}
+            {% for bc in breeder_cages %}
                 <tr>
                     <td>
                         {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
@@ -86,7 +86,7 @@
     {% endif %}
 
     {# Edit Breeder Cage Modals #}
-    {% for bc in colony.breeder_cages %}
+    {% for bc in breeder_cages %}
     {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
     {# Compute initial deceased checkbox state using parents + litters #}
     {% set group_ids = bc.litters + [bc.cage_id] %}
@@ -150,7 +150,7 @@
     {% endfor %}
 
     {# Delete Breeder Cage Modals #}
-    {% for bc in colony.breeder_cages %}
+    {% for bc in breeder_cages %}
         {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
         <div class="modal fade" id="deleteBreederCageModal{{ safe_id }}" tabindex="-1">
             <div class="modal-dialog">
@@ -176,7 +176,7 @@
     {% endfor %}
 
     {# Add Litter Modals #}
-    {% for bc in colony.breeder_cages %}
+    {% for bc in breeder_cages %}
     {% set safe_id = bc.cage_id|replace('.', '_')|replace('-', '_')|replace(' ', '_') %}
     <div class="modal fade" id="addLitterModal{{ safe_id }}" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -254,7 +254,7 @@
     <hr />
 
     {# Exclude breeder cages from regular cages grouping #}
-    {% set breeder_ids = colony.breeder_cages | map(attribute='cage_id') | list %}
+    {% set breeder_ids = breeder_cages | map(attribute='cage_id') | list %}
 
     {# Regular Cages Section #}
     {% if cages %}
